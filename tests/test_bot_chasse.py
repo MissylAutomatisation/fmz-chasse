@@ -182,8 +182,11 @@ def test_tableau_perte_max_une_ligne():
     lines = out.splitlines()
     assert lines[0] == lines[-1] == "```" and lines[1] == "🎯 Chasse pour 100 pertes max"
     assert "Réplique" not in out and "📅" not in out and "⭐" not in out
-    size, mean, p90, _, worst = [c.split()[0] for c in lines[-2].split("|")]
-    assert 190 <= int(size) <= 230 and 40 < float(mean.replace(",", ".")) < int(p90) <= int(worst) <= 100
+    size, mean, _, worst = [c.split()[0] for c in lines[-7].split("|")]
+    assert lines[-5] == "📊 Tu perdras au plus :"
+    p50, p90, p99 = [int(l.split()[0]) for l in lines[-4:-1]]
+    assert [l.split("dans ")[1] for l in lines[-4:-1]] == ["50 % des cas", "90 % des cas", "99 % des cas"]
+    assert 190 <= int(size) <= 230 and p50 < float(mean.replace(",", ".")) < p90 <= p99 <= int(worst) <= 100
     assert "Pire cas :" not in out                                                 # assez de JSN : pas de détail
     army = {"jsn": 1208, "sn": 99}
     assert risque.stats(army, 2770, int(size) + 1, 1, 2, 5000)[2] > 100          # 1 cm² de plus : trop de pertes
@@ -200,14 +203,15 @@ def test_detail_des_pertes_selon_la_compo():
     assert risque.dead(army, 50) == {"jsn": 50} and risque.dead(army, 0) == {}
     assert risque.army_text(risque.dead(army, 100)) == "80 JSN + 20 SN"
     out = risque.answer("80 JSN + 1 200 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100").splitlines()
-    assert out[-3].split("|")[-1].strip().isdigit() and out[-2].startswith("Pire cas : 80 JSN + ")
+    assert out[-8].split("|")[-1].strip().isdigit() and out[-7].startswith("Pire cas : 80 JSN + ")
 
 
 def test_perte_jamais_une_chasse_perdue():
     """Limite au-delà de l'armée : plafonnée à l'armée moins 1, la chasse reste gagnée."""
     out = risque.answer("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100000").splitlines()
     assert out[1] == "🎯 Chasse pour 1 306 pertes max"
-    assert int(out[-3].split()[0]) < 1000 and int(out[-3].split("|")[-1]) <= 1306
+    row = next(l for l in out if "cm²  |" in l or " cm² |" in l)
+    assert int(row.split()[0]) < 1000 and int(row.split("|")[-1]) <= 1306
 
 
 def test_quantile_9_fois_sur_10():
