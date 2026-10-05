@@ -347,8 +347,15 @@ def loss_table(army, armes, bouclier, tdc, cap, n=5000):
     return "\n".join(["```"] + head + [
         " Chasse   | Pertes moy. | cm²/perte | Pire cas",
         "----------+-------------+-----------+---------",
-        f" {f'{size} cm²':<8} | {comma(mean):<11} | {comma(size / mean) if mean else 'sans perte':<9} | {worst}",
+        f" {f'{size} cm²':<8} | {comma(mean):<11} | {comma(size / mean) if mean else 'sans perte':<9} | "
+        f"{army_text(dead(army, worst)) or 0}",
         "```"])
+
+
+def dead(army, k):
+    """Les k pertes par unité, les plus faibles d'abord : {"jsn": 80, "sn": 20}."""
+    left = lose(army, k)
+    return {u: n - left.get(u, 0) for u, n in army.items() if n - left.get(u, 0)}
 
 
 def perte(text):
