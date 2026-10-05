@@ -34,7 +34,7 @@ UNIT_WORDS = [(r"jeunes?\s+soldates?\s+naines?", "jsn", False), (r"jeunes?\s+sol
               (r"tks?", "tk", False), (r"tues?", "tue", False), (r"tus?", "tu", False),
               (r"S", "s", True), (r"C", "c", True), (r"A", "a", True)]   # lettres seules : en majuscule seulement
 UNIT_ORDER = list(hunt_mc.UNITS)                     # affichage dans l'ordre du jeu
-LEVEL_WORDS = [(r"bouc\w*(?:\s+thoraciques?)?", "bouclier"), (r"arm\w*", "armes")]
+LEVEL_WORDS = [(r"bouc[^\W\d_]*(?:\s+thoraciques?)?", "bouclier"), (r"arm[^\W\d_]*", "armes")]   # lettres seules : « armes1 »
 TDC_WORDS = r"tdc|terrains?(?:\s+de\s+chasse)?|cm²|cm2|cm"
 TARGETS = (1, 2, 5, 7.5, 10, 15, 20)                          # niveaux de risque (%) des tailles repères
 MAX_SIZE = 5000
@@ -54,7 +54,8 @@ def to_int(text):
 
 def take(text, word, num, after_first, case=False, both=True):
     """Cherche « mot nombre » et « nombre mot » (ordre préféré en premier). Renvoie (nombres trouvés, texte sans eux)."""
-    after, before = rf"\b(?:{word})\b{SEP}({num})", rf"(?<![\d.])({num})\s*(?:{word})\b"
+    # « mot nombre » : le nombre peut être collé au mot (« armes1 »)
+    after, before = rf"\b(?:{word})(?![^\W\d_]){SEP}({num})", rf"(?<![\d.])({num})\s*(?:{word})\b"
     flags = 0 if case else re.I
     found = []
     for pattern in ((after, before) if after_first else (before, after))[:2 if both else 1]:

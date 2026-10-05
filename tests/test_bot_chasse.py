@@ -99,6 +99,7 @@ def test_meilleur_ratio_vraiment_le_meilleur():
     "JSN 1208, SN 99, Armes=1, Bouc 2, TDC=2770",
     "1 armes, 2 bouclier, 2770 tdc, 1208 jeune soldate naine, 99 soldates naines",
     "1.208 JSN\n99 SN\nArmes 1\nBouclier 2\nTerrain de chasse 2 770",
+    "1 208 Jeunes Soldates Naines 99 Soldates Naines, armes1 , bouclier2 .TDC2770",
 ])
 def test_lecture_souple(text):
     assert risque.parse(text) == ({"jsn": 1208, "sn": 99}, 1, 2, 2770)
