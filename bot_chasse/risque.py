@@ -42,6 +42,7 @@ STARS = ((0.85, "⭐"), (0.80, "🔥"))               # plus grosse chasse qui g
 NEXT_HUNTS = 5                                       # chasses ⭐ prévues à la suite, pire cas de pertes retiré à chaque fois
 REPLIQUES = {10: 3, 30: 2, 50: 1.5}                  # réplique comptée (%) -> l'attaque doit dépasser ce multiple de la vie
 REPLIQUE_WORDS = r"r[ée]pli(?:que)?s?\s*[:=]?\s*(\d+)\s*%?"   # « réplique 30 », « Replique: 50 % », « répli 30 »
+PERTE_WORDS = r"pertes?(?:\s+max(?:imum|imales?|i)?)?"      # « perte 100 », « pertes max 100 », « 100 pertes »
 
 
 class ParseError(ValueError):
@@ -330,6 +331,32 @@ def table(army, armes, bouclier, tdc, n=5000, plan=True, rep=10):
     return "\n".join(lines + ["```"])
 
 
+def max_loss_size(army, armes, bouclier, tdc, cap, n=5000):
+    """Plus grosse chasse dont le pire cas reste ≤ cap pertes (0 si aucune). Le pire cas monte avec la taille."""
+    return largest_size(lambda s: stats(army, tdc, s, armes, bouclier, n)[2], cap, MAX_SIZE)
+
+
+def loss_table(army, armes, bouclier, tdc, cap, n=5000):
+    """Une seule ligne : la plus grosse chasse avec au pire cap pertes. Sans réplique ni prochaines chasses."""
+    head = [f"🎯 Chasse pour {fmt_n(cap)} pertes max",
+            f"   ({army_text(army)}, Armes {armes}, Bouclier {bouclier}, TDC {fmt_n(tdc)})", ""]
+    size = max_loss_size(army, armes, bouclier, tdc, cap, n)
+    if not size:
+        return "\n".join(["```"] + head + [f"Aucune chasse possible avec au pire {fmt_n(cap)} pertes.", "```"])
+    _, mean, worst = stats(army, tdc, size, armes, bouclier, n)
+    return "\n".join(["```"] + head + [
+        " Chasse   | Pertes moy. | cm²/perte | Pire cas",
+        "----------+-------------+-----------+---------",
+        f" {f'{size} cm²':<8} | {comma(mean):<11} | {comma(size / mean) if mean else 'sans perte':<9} | {worst}",
+        "```"])
+
+
+def perte(text):
+    """(pertes max demandées ou None, texte sans « perte XXX »)."""
+    found, rest = take(" " + text + " ", PERTE_WORDS, NUM, after_first=True)
+    return (found[-1], rest) if found else (None, text)
+
+
 ENORME_TEUB = r"""```
      ____
     /    \
@@ -353,9 +380,12 @@ def answer(text, plan=True):
         return ENORME_TEUB
     try:
         rep, text = replique(text)
+        cap, text = perte(text)
         army, armes, bouclier, tdc = parse(text)
     except ParseError as e:
-        return f"❌ {e}\nExemple : `1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770` (+ `réplique 30` si besoin)"
+        return f"❌ {e}\nExemple : `1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770` (+ `réplique 30` ou `perte 100` si besoin)"
+    if cap is not None:
+        return loss_table(army, armes, bouclier, tdc, cap)
     return table(army, armes, bouclier, tdc, plan=plan, rep=rep)
 
 

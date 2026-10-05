@@ -8,6 +8,8 @@ Dans un salon dédié, colle ton armée : le bot répond avec le tableau du risq
 
 Ajoute `réplique 30` (ou `réplique 50`) pour compter le risque sur la réplique 30 % au lieu de 10 % : mêmes lignes 🛡 📈 ⭐ 🔥 et 📅, mais pour des chasses plus grosses. Écritures acceptées : replique, réplique, repliques, répliques. Sans ce mot, le bot compte sur 10 %.
 
+Ajoute `perte 100` pour avoir seulement la plus grosse chasse dont le **pire cas** reste ≤ 100 pertes : une ligne (Chasse, Pertes moy., cm²/perte, Pire cas), sans réplique ni prochaines chasses. Écritures acceptées : perte 100, pertes 100, perte max 100, pertes: 100, 100 pertes.
+
 Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates Naines… »). Unités : toutes (JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE), noms longs ou abréviations ; S, C et A seuls en majuscule. Armes et Bouclier absents = niveau 0. Le TDC est obligatoire.
 
 ## Fichiers

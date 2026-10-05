@@ -167,3 +167,26 @@ def test_vrai_meilleur_ratio_avec_replique_30():
     star = lambda rows: next(r[0] for r in rows if "⭐" in r[5])
     assert best(rep30) == best(normal) and star(rep30) > star(normal) + 15
     assert "🛡" in next(r for r in rep30 if r[0] > best(normal))[5]
+
+
+@pytest.mark.parametrize("suffix", [", perte 100", ", pertes 100", ", Perte max 100", ", pertes: 100", ", 100 pertes"])
+def test_perte_toutes_les_ecritures(suffix):
+    cap, rest = risque.perte("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770" + suffix)
+    assert cap == 100 and risque.parse(rest) == ({"jsn": 1208, "sn": 99}, 1, 2, 2770)
+    assert risque.perte("1 208 JSN, TDC 2 770") == (None, "1 208 JSN, TDC 2 770")
+
+
+def test_tableau_perte_max_une_ligne():
+    """Plus grosse chasse au pire cas ≤ 100 : une ligne, sans colonne réplique ni prochaines chasses."""
+    out = risque.answer("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100")
+    lines = out.splitlines()
+    assert lines[0] == lines[-1] == "```" and lines[1] == "🎯 Chasse pour 100 pertes max"
+    assert "Réplique" not in out and "📅" not in out and "⭐" not in out
+    size, mean, _, worst = [c.split()[0] for c in lines[-2].split("|")]
+    assert 190 <= int(size) <= 230 and 40 < float(mean.replace(",", ".")) < 80 and int(worst) <= 100
+    army = {"jsn": 1208, "sn": 99}
+    assert risque.stats(army, 2770, int(size) + 1, 1, 2, 5000)[2] > 100          # 1 cm² de plus : trop de pertes
+
+
+def test_perte_impossible():
+    assert "Aucune chasse possible" in risque.answer("10 JSN, TDC 50 000, perte 0")
