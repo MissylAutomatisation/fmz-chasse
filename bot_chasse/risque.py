@@ -1,7 +1,8 @@
 """Risque selon la taille de chasse : lit « 1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770 » et rend le tableau.
 
 Moteur : hunt_mc.py (tirages de prédateurs réalistes, repris de fourmizzz-zero-perte.pages.dev).
-« Réplique > 10 % » = au 1er tour, l'attaque ne dépasse pas 3 fois la vie des prédateurs.
+« Réplique > 10 % » = au 1er tour, l'attaque ne dépasse pas 3 fois la vie des prédateurs (> 30 % : 2 fois, > 50 % :
+1,5 fois). Par défaut 10 % ; « réplique 30 » ou « réplique 50 » dans le message change le seuil compté.
 """
 import itertools
 import logging
@@ -39,6 +40,8 @@ TARGETS = (1, 2, 5, 7.5, 10, 15, 20)                          # niveaux de risqu
 MAX_SIZE = 5000
 STARS = ((0.85, "⭐"), (0.80, "🔥"))               # plus grosse chasse qui garde 85 % / 80 % du meilleur cm²/perte (Martin)
 NEXT_HUNTS = 5                                       # chasses ⭐ prévues à la suite, pire cas de pertes retiré à chaque fois
+REPLIQUES = {10: 3, 30: 2, 50: 1.5}                  # réplique comptée (%) -> l'attaque doit dépasser ce multiple de la vie
+REPLIQUE_WORDS = r"r[ée]pli(?:que)?s?\s*[:=]?\s*(\d+)\s*%?"   # « réplique 30 », « Replique: 50 % », « répli 30 »
 
 
 class ParseError(ValueError):
@@ -92,8 +95,8 @@ def parse(text):
 _STATS = {}
 
 
-def stats(army, tdc, size, armes, bouclier, n, seed=1):
-    """(risque de réplique > 10 % en %, pertes moyennes, pire cas) sur n tirages, mis en cache.
+def stats(army, tdc, size, armes, bouclier, n, seed=1, rep=10):
+    """(risque de réplique > rep % en %, pertes moyennes, pire cas) sur n tirages, mis en cache.
 
     Mêmes tirages pour toutes les tailles et tous les TDC (graine fixe) : les courbes sont lisses, les recherches
     dichotomiques ne sautent plus d'une taille à l'autre à cause du hasard."""
@@ -102,7 +105,8 @@ def stats(army, tdc, size, armes, bouclier, n, seed=1):
         if len(_STATS) > 20000:
             _STATS.clear()
         _STATS[key] = _stats(army, tdc, size, armes, bouclier, n, seed)
-    return _STATS[key]
+    risks, mean, worst = _STATS[key]
+    return risks[rep], mean, worst
 
 
 PICKS_KEPT = 24                                      # tirages (type, %) gardés par meute ; la suite est tirée à la demande
@@ -124,13 +128,14 @@ def _picks(seed, i):
 
 
 def _chunk(army, tdc, size, armes, bouclier, seed, first, last):
-    """(nb de répliques > 10 %, somme des pertes, pire cas) sur les meutes first..last-1."""
+    """({réplique: nb de fois au-dessus}, somme des pertes, pire cas) sur les meutes first..last-1."""
     att = sum(hunt_mc.UNITS[u][1] * k for u, k in army.items()) * (1 + 0.1 * armes)
-    big, total, worst = 0, 0, 0
+    big, total, worst = dict.fromkeys(REPLIQUES, 0), 0, 0
     for i in range(first, last):
         prey = hunt_mc.draw_prey_from(tdc, size, _picks(seed, i))
         life = sum(k * hunt_mc.PREY[j][2] for j, k in enumerate(prey))
-        big += att <= 3 * life
+        for rep, mult in REPLIQUES.items():
+            big[rep] += att <= mult * life
         loss = hunt_mc.fight(army, prey, armes, bouclier)
         total, worst = total + loss, max(worst, loss)
     return big, total, worst
@@ -162,7 +167,8 @@ def _stats(army, tdc, size, armes, bouclier, n, seed):
             parts = None
     if parts is None:
         parts = [_chunk(*args, 0, n)]
-    return 100 * sum(p[0] for p in parts) / n, sum(p[1] for p in parts) / n, max(p[2] for p in parts)
+    risks = {rep: 100 * sum(p[0][rep] for p in parts) / n for rep in REPLIQUES}
+    return risks, sum(p[1] for p in parts) / n, max(p[2] for p in parts)
 
 
 def largest_size(risk, target, hi):
@@ -177,9 +183,9 @@ def largest_size(risk, target, hi):
     return lo
 
 
-def sizes(army, tdc, armes, bouclier, n=5000):
+def sizes(army, tdc, armes, bouclier, n=5000, rep=10):
     """Tailles de chasse pour chaque niveau de risque de TARGETS (sans doublon, croissantes)."""
-    risk = lambda size: stats(army, tdc, size, armes, bouclier, n)[0]
+    risk = lambda size: stats(army, tdc, size, armes, bouclier, n, rep=rep)[0]
     hi = 8
     while hi < MAX_SIZE and risk(hi) <= TARGETS[-1]:
         hi *= 2
@@ -232,13 +238,14 @@ def star_sizes(army, tdc, armes, bouclier, rows, n=5000):         # même n que 
     return marks
 
 
-def key_rows(army, armes, bouclier, tdc, n=5000):
+def key_rows(army, armes, bouclier, tdc, n=5000, rep=10):
     """Les lignes utiles [(taille, risque, pertes moy., pire cas, cm²/perte, symboles)] : 🛡 plus grosse chasse à
-    1 % de risque, 📈 meilleur cm²/perte, ⭐ opti, 🔥 flemme. Une taille qui a plusieurs rôles cumule les symboles."""
+    1 % de risque, 📈 meilleur cm²/perte, ⭐ opti, 🔥 flemme. Une taille qui a plusieurs rôles cumule les symboles.
+    Le risque est celui de dépasser la réplique rep % : avec 30, les lignes étudiées sont plus grosses."""
     def row(s):
-        risk, mean, worst = stats(army, tdc, s, armes, bouclier, n)
+        risk, mean, worst = stats(army, tdc, s, armes, bouclier, n, rep=rep)
         return s, risk, mean, worst, s / mean if mean else float("inf")             # cm² par JSN perdue
-    rows = [row(s) for s in sizes(army, tdc, armes, bouclier, n)]
+    rows = [row(s) for s in sizes(army, tdc, armes, bouclier, n, rep)]
     if not rows:
         return []
     marks = star_sizes(army, tdc, armes, bouclier, rows, n)
@@ -250,14 +257,14 @@ def key_rows(army, armes, bouclier, tdc, n=5000):
     return [row(s) + (roles[s],) for s in sorted(roles)]
 
 
-def next_hunts(army, armes, bouclier, tdc, n=5000):
+def next_hunts(army, armes, bouclier, tdc, n=5000, rep=10):
     """Les NEXT_HUNTS chasses ⭐ à la suite : [(TDC, taille, pire cas)], puis l'armée et le TDC après.
 
     Entre deux chasses, le TDC monte de la taille chassée et l'armée perd le pire cas (prudent : une grosse réplique
     sur la 1re chasse pèse aussi sur les suivantes). Les plus faibles meurent d'abord (ordre du jeu)."""
     plan = []
     for _ in range(NEXT_HUNTS):
-        rows = key_rows(army, armes, bouclier, tdc, n)
+        rows = key_rows(army, armes, bouclier, tdc, n, rep)
         star = next((r for r in rows if "⭐" in r[5]), None)
         if star is None:
             break
@@ -280,15 +287,15 @@ def lose(army, k):
 WAIT_PLAN = "📅 Calcul des prochaines chasses ⭐…"
 
 
-def table(army, armes, bouclier, tdc, n=5000, plan=True):
+def table(army, armes, bouclier, tdc, n=5000, plan=True, rep=10):
     """Le message prêt à coller sur Discord (avec les ```), étroit pour le téléphone : les lignes utiles et les
     prochaines chasses ⭐ (plan=False : WAIT_PLAN à la place, le bot répond d'abord vite puis complète)."""
-    rows = key_rows(army, armes, bouclier, tdc, n)
+    rows = key_rows(army, armes, bouclier, tdc, n, rep)
     if not rows:
         return "```\n🎯 Aucune chasse possible : armée trop faible pour ce TDC.\n```"
-    lines = ["```", "🎯 Chasses conseillées",
+    lines = ["```", "🎯 Chasses conseillées" + (f" (réplique {rep} %)" if rep != 10 else ""),
              f"   ({army_text(army)}, Armes {armes}, Bouclier {bouclier}, TDC {fmt_n(tdc)})", "",
-             " Chasse  | Réplique > 10 % | Pertes moy. | cm²/perte | Pire cas",
+             f" Chasse  | Réplique > {rep} % | Pertes moy. | cm²/perte | Pire cas",
              "---------+-----------------+-------------+-----------+---------"]
     for s, risk, mean, worst, per_loss, roles in rows:
         lines.append(f" {f'{s} cm²':<7} | {fmt_pct(risk):<15} | {comma(mean):<11} | "
@@ -297,7 +304,7 @@ def table(army, armes, bouclier, tdc, n=5000, plan=True):
               f"⭐ opti ({round(STARS[0][0] * 100)} % du meilleur)  🔥 flemme ({round(STARS[1][0] * 100)} %)"]
     if not plan:
         return "\n".join(lines + ["", WAIT_PLAN, "```"])
-    plan, army_after, tdc_after = next_hunts(army, armes, bouclier, tdc, n)
+    plan, army_after, tdc_after = next_hunts(army, armes, bouclier, tdc, n, rep)
     if len(plan) > 1:
         lines += ["", f"📅 {len(plan)} prochaines chasses ⭐ (pire cas retiré à chaque fois)",
                   " #  | TDC     | Chasse  | Pire", "----+---------+---------+-----"]
@@ -328,10 +335,22 @@ def answer(text, plan=True):
     if re.search(r"[ée]norme\s+teub", text, re.IGNORECASE):     # easter egg demandé par Martin
         return ENORME_TEUB
     try:
+        rep, text = replique(text)
         army, armes, bouclier, tdc = parse(text)
     except ParseError as e:
-        return f"❌ {e}\nExemple : `1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770`"
-    return table(army, armes, bouclier, tdc, plan=plan)
+        return f"❌ {e}\nExemple : `1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770` (+ `réplique 30` si besoin)"
+    return table(army, armes, bouclier, tdc, plan=plan, rep=rep)
+
+
+def replique(text):
+    """(réplique comptée, texte sans « réplique XX ») ; 10 par défaut."""
+    found = re.findall(REPLIQUE_WORDS, text, re.IGNORECASE)
+    if not found:
+        return 10, text
+    rep = int(found[-1])
+    if rep not in REPLIQUES:
+        raise ParseError(f"Réplique {rep} % impossible. Valeurs possibles : {', '.join(map(str, REPLIQUES))}.")
+    return rep, re.sub(REPLIQUE_WORDS, " ; ", text, flags=re.IGNORECASE)
 
 
 if __name__ == "__main__":                           # essai en local : python bot_chasse/risque.py "1 208 JSN ..."

@@ -115,3 +115,31 @@ def test_easter_egg_enorme_teub():
     for text in ("énorme teub", "Une ÉNORME  teub !", "enorme teub"):
         assert risque.answer(text) == risque.ENORME_TEUB
     assert risque.answer("teub").startswith("❌")
+
+
+def test_easter_egg_envoye_en_silencieux():
+    src = (Path(__file__).resolve().parent.parent / "bot_chasse" / "bot.py").read_text(encoding="utf-8")
+    assert "silent = reply == risque.ENORME_TEUB" in src and "silent=silent" in src
+
+
+@pytest.mark.parametrize("word", ["replique", "réplique", "repliques", "répliques", "Réplique", "RÉPLIQUES"])
+def test_replique_toutes_les_ecritures(word):
+    for suffix, rep in ((f" {word} 30", 30), (f", {word}: 50 %", 50), (f" {word}=10", 10)):
+        assert risque.replique("1 208 JSN, TDC 2 770" + suffix)[0] == rep
+    assert risque.parse(risque.replique(f"1 208 JSN + 99 SN, {word} 30, Armes 1, Bouclier 2, TDC 2 770")[1]) == \
+        ({"jsn": 1208, "sn": 99}, 1, 2, 2770)
+
+
+def test_replique_par_defaut_10_et_valeur_impossible():
+    assert risque.replique("1 208 JSN, TDC 2 770") == (10, "1 208 JSN, TDC 2 770")
+    assert risque.answer("1 208 JSN, TDC 2 770, réplique 40").startswith("❌ Réplique 40 % impossible")
+
+
+def test_tableau_replique_30():
+    """Même modèle, colonne « Réplique > 30 % » et chasses plus grosses qu'en 10 %."""
+    text = "1 050 JSN + 154 SN + 218 JS, Armes 1, Bouclier 1, TDC 3 770"
+    normal, rep30 = risque.answer(text, plan=False), risque.answer(text + ", réplique 30", plan=False)
+    assert "Réplique > 10 %" in normal and "Chasses conseillées\n" in normal
+    assert "Réplique > 30 %" in rep30 and "🎯 Chasses conseillées (réplique 30 %)" in rep30
+    first = lambda out: int(next(l for l in out.splitlines() if "🛡" in l and "|" in l).split()[0])
+    assert first(rep30) > first(normal) + 30

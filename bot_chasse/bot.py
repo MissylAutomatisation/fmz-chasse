@@ -33,7 +33,8 @@ async def on_message(message: discord.Message):
         except Exception:
             logging.exception("calcul impossible pour %r", message.content)
             reply = "❌ Erreur pendant le calcul. Vérifie le texte collé."
-    sent = await message.reply(reply, mention_author=False)
+    silent = reply == risque.ENORME_TEUB                       # easter egg : message silencieux (pas de notification)
+    sent = await message.reply(reply, mention_author=False, silent=silent)
     if risque.WAIT_PLAN not in reply:
         return
     try:                                                       # puis les prochaines chasses (le cache garde le tableau)

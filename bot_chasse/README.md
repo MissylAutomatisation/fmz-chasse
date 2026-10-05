@@ -6,6 +6,8 @@ Dans un salon dédié, colle ton armée : le bot répond avec le tableau du risq
 1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770
 ```
 
+Ajoute `réplique 30` (ou `réplique 50`) pour compter le risque sur la réplique 30 % au lieu de 10 % : mêmes lignes 🛡 📈 ⭐ 🔥 et 📅, mais pour des chasses plus grosses. Écritures acceptées : replique, réplique, repliques, répliques. Sans ce mot, le bot compte sur 10 %.
+
 Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates Naines… »). Unités : toutes (JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE), noms longs ou abréviations ; S, C et A seuls en majuscule. Armes et Bouclier absents = niveau 0. Le TDC est obligatoire.
 
 ## Fichiers
