@@ -182,8 +182,8 @@ def test_tableau_perte_max_une_ligne():
     lines = out.splitlines()
     assert lines[0] == lines[-1] == "```" and lines[1] == "🎯 Chasse pour 100 pertes max"
     assert "Réplique" not in out and "📅" not in out and "⭐" not in out
-    size, mean, _, worst = [c.split()[0] for c in lines[-2].split("|")]
-    assert 190 <= int(size) <= 230 and 40 < float(mean.replace(",", ".")) < 80 and int(worst) <= 100
+    size, mean, p90, _, worst = [c.split()[0] for c in lines[-2].split("|")]
+    assert 190 <= int(size) <= 230 and 40 < float(mean.replace(",", ".")) < int(p90) <= int(worst) <= 100
     assert "Pire cas :" not in out                                                 # assez de JSN : pas de détail
     army = {"jsn": 1208, "sn": 99}
     assert risque.stats(army, 2770, int(size) + 1, 1, 2, 5000)[2] > 100          # 1 cm² de plus : trop de pertes
@@ -208,3 +208,10 @@ def test_perte_jamais_une_chasse_perdue():
     out = risque.answer("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100000").splitlines()
     assert out[1] == "🎯 Chasse pour 1 306 pertes max"
     assert int(out[-3].split()[0]) < 1000 and int(out[-3].split("|")[-1]) <= 1306
+
+
+def test_quantile_9_fois_sur_10():
+    from collections import Counter
+    assert risque.quantile(Counter({0: 9, 50: 1}), 0.9) == 0          # 9 sur 10 sans perte
+    assert risque.quantile(Counter({0: 8, 50: 2}), 0.9) == 50
+    assert risque.quantile(Counter(range(10)), 0.9) == 8                # comme hunt_mc : rang int(0,9 × 9)

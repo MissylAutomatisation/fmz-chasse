@@ -10,6 +10,7 @@ import os
 import random
 import re
 import sys
+from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -98,7 +99,7 @@ _STATS = {}
 
 
 def stats(army, tdc, size, armes, bouclier, n, seed=1, rep=10):
-    """(risque de réplique > rep % en %, pertes moyennes, pire cas) sur n tirages, mis en cache.
+    """(risque de réplique > rep % en %, pertes moyennes, pire cas, 9 fois sur 10 au plus) sur n tirages, mis en cache.
 
     Mêmes tirages pour toutes les tailles et tous les TDC (graine fixe) : les courbes sont lisses, les recherches
     dichotomiques ne sautent plus d'une taille à l'autre à cause du hasard."""
@@ -107,8 +108,8 @@ def stats(army, tdc, size, armes, bouclier, n, seed=1, rep=10):
         if len(_STATS) > 20000:
             _STATS.clear()
         _STATS[key] = _stats(army, tdc, size, armes, bouclier, n, seed)
-    risks, mean, worst = _STATS[key]
-    return risks[rep], mean, worst
+    risks, mean, worst, p90 = _STATS[key]
+    return risks[rep], mean, worst, p90
 
 
 PICKS_KEPT = 24                                      # tirages (type, %) gardés par meute ; la suite est tirée à la demande
@@ -130,17 +131,16 @@ def _picks(seed, i):
 
 
 def _chunk(army, tdc, size, armes, bouclier, seed, first, last):
-    """({réplique: nb de fois au-dessus}, somme des pertes, pire cas) sur les meutes first..last-1."""
+    """({réplique: nb de fois au-dessus}, {pertes: nb de fois}) sur les meutes first..last-1."""
     att = sum(hunt_mc.UNITS[u][1] * k for u, k in army.items()) * (1 + 0.1 * armes)
-    big, total, worst = dict.fromkeys(REPLIQUES, 0), 0, 0
+    big, losses = dict.fromkeys(REPLIQUES, 0), Counter()
     for i in range(first, last):
         prey = hunt_mc.draw_prey_from(tdc, size, _picks(seed, i))
         life = sum(k * hunt_mc.PREY[j][2] for j, k in enumerate(prey))
         for rep, mult in REPLIQUES.items():
             big[rep] += att <= mult * life
-        loss = hunt_mc.fight(army, prey, armes, bouclier)
-        total, worst = total + loss, max(worst, loss)
-    return big, total, worst
+        losses[hunt_mc.fight(army, prey, armes, bouclier)] += 1
+    return big, losses
 
 
 _POOL = None
@@ -170,7 +170,17 @@ def _stats(army, tdc, size, armes, bouclier, n, seed):
     if parts is None:
         parts = [_chunk(*args, 0, n)]
     risks = {rep: 100 * sum(p[0][rep] for p in parts) / n for rep in REPLIQUES}
-    return risks, sum(p[1] for p in parts) / n, max(p[2] for p in parts)
+    losses = sum((p[1] for p in parts), Counter())
+    return risks, sum(k * c for k, c in losses.items()) / n, max(losses), quantile(losses, 0.9)
+
+
+def quantile(losses, q):
+    """Pertes au plus, q fois sur 1 ({pertes: nb de fois}) : même règle que hunt_mc.hunt_stats."""
+    rank, seen = int(q * (sum(losses.values()) - 1)), 0
+    for k in sorted(losses):
+        seen += losses[k]
+        if seen > rank:
+            return k
 
 
 def largest_size(risk, target, hi):
@@ -256,7 +266,7 @@ def key_rows(army, armes, bouclier, tdc, n=5000, rep=10):
     Le risque est celui de dépasser la réplique rep % : avec 30, les lignes étudiées sont plus grosses. 📈 ne dépend
     pas de rep (repères à 10 %) ; ⭐ et 🔥 se comparent au meilleur cm²/perte des lignes de rep."""
     def row(s):
-        risk, mean, worst = stats(army, tdc, s, armes, bouclier, n, rep=rep)
+        risk, mean, worst, _ = stats(army, tdc, s, armes, bouclier, n, rep=rep)
         return s, risk, mean, worst, s / mean if mean else float("inf")             # cm² par JSN perdue
     rows = [row(s) for s in sizes(army, tdc, armes, bouclier, n, rep)]
     if not rows:
@@ -344,13 +354,13 @@ def loss_table(army, armes, bouclier, tdc, cap, n=5000):
     size = max_loss_size(army, armes, bouclier, tdc, cap, n)
     if not size:
         return "\n".join(["```"] + head + [f"Aucune chasse possible avec au pire {fmt_n(cap)} pertes.", "```"])
-    _, mean, worst = stats(army, tdc, size, armes, bouclier, n)
+    _, mean, worst, p90 = stats(army, tdc, size, armes, bouclier, n)
     lost = dead(army, worst)
     detail = [f"Pire cas : {army_text(lost)}"] if len(lost) > 1 else []     # plusieurs types d'unités touchés
     return "\n".join(["```"] + head + [
-        " Chasse   | Pertes moy. | cm²/perte | Pire cas",
-        "----------+-------------+-----------+---------",
-        f" {f'{size} cm²':<8} | {comma(mean):<11} | {comma(size / mean) if mean else 'sans perte':<9} | {worst}",
+        " Chasse   | Pertes moy. | 9/10 | cm²/perte | Pire cas",
+        "----------+-------------+------+-----------+---------",
+        f" {f'{size} cm²':<8} | {comma(mean):<11} | {p90:<4} | {comma(size / mean) if mean else 'sans perte':<9} | {worst}",
         ] + detail + ["```"])
 
 
