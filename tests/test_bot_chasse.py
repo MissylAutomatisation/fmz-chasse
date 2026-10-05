@@ -78,6 +78,20 @@ def test_etoile_sur_la_plus_grosse_chasse_rentable():
     assert 66 <= star <= 78 <= fire + 4 and fire >= star
 
 
+def test_meilleur_ratio_vraiment_le_meilleur():
+    """Sardi (05/10) : 📈 sautait de 100 (B3) à 85 cm² (B4), seules les tailles repères étaient comparées.
+    Le vrai sommet est vers 95 cm² dans les deux cas : le bouclier ne doit pas le faire reculer."""
+    army = {"jsn": 944, "sn": 184, "ne": 1, "js": 219, "s": 2}
+    best = {}
+    for bouclier in (3, 4):
+        rows = risque.key_rows(army, 3, bouclier, 4360)
+        size, ratio = next((r[0], r[4]) for r in rows if "📈" in r[5])
+        scan = [s / risque.stats(army, 4360, s, 3, bouclier, 5000)[1] for s in range(60, 141, 5)]
+        assert ratio >= max(scan) - 1e-9
+        best[bouclier] = size
+    assert best[4] >= best[3] - 2 and 90 <= best[3] <= 100
+
+
 @pytest.mark.parametrize("text", [
     "1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770",
     "TDC 2770 / armes 1 / bouclier 2 / 1208 jsn 99 sn",

@@ -238,6 +238,17 @@ def star_sizes(army, tdc, armes, bouclier, rows, n=5000):         # même n que 
     return marks
 
 
+def best_ratio_size(marks, ratio):
+    """Taille au meilleur cm²/perte. Les tailles repères (marks, croissantes) ne servent qu'à encadrer : le sommet
+    est souvent entre deux, et la courbe a des petites bosses. On balaie de la 1re à la dernière repère (sous 1 % de
+    risque, le rendement monte avec la taille), puis on affine au cm² près. À égalité, la plus grosse chasse."""
+    key = lambda s: (ratio(s), s)
+    lo, hi = marks[0], marks[-1]
+    step = max(1, (hi - lo) // 25)
+    best = max(list(marks) + list(range(lo, hi + 1, step)), key=key)
+    return max(range(max(lo, best - step + 1), min(hi, best + step - 1) + 1), key=key)
+
+
 def key_rows(army, armes, bouclier, tdc, n=5000, rep=10):
     """Les lignes utiles [(taille, risque, pertes moy., pire cas, cm²/perte, symboles)] : 🛡 plus grosse chasse à
     1 % de risque, 📈 meilleur cm²/perte, ⭐ opti, 🔥 flemme. Une taille qui a plusieurs rôles cumule les symboles.
@@ -248,6 +259,9 @@ def key_rows(army, armes, bouclier, tdc, n=5000, rep=10):
     rows = [row(s) for s in sizes(army, tdc, armes, bouclier, n, rep)]
     if not rows:
         return []
+    top = best_ratio_size([r[0] for r in rows], lambda s: row(s)[4])
+    if top not in [r[0] for r in rows]:
+        rows = sorted(rows + [row(top)])
     marks = star_sizes(army, tdc, armes, bouclier, rows, n)
     roles = {}
     for s, symbol in [(rows[0][0], "🛡"), (max(rows, key=lambda r: r[4])[0], "📈")] + [(s, m) for s, m in marks.items()]:
