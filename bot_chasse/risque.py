@@ -349,8 +349,18 @@ def table(army, armes, bouclier, tdc, n=5000, plan=True, rep=10):
 
 
 def max_loss_size(army, armes, bouclier, tdc, cap, n=5000):
-    """Plus grosse chasse dont le pire cas reste ≤ cap pertes (0 si aucune). Le pire cas monte avec la taille."""
-    return largest_size(lambda s: stats(army, tdc, s, armes, bouclier, n)[2], cap, MAX_SIZE)
+    """Plus grosse chasse dont le pire cas reste ≤ cap pertes (0 si aucune).
+
+    Le pire cas monte avec la taille mais pas régulièrement (194 cm² : 102, 196 cm² : 101) : après la recherche
+    dichotomique, on balaie au cm² près jusqu'à 5 % au-delà de la dernière taille retenue."""
+    worst = lambda s: stats(army, tdc, s, armes, bouclier, n)[2]
+    best = largest_size(worst, cap, MAX_SIZE)
+    s = best
+    while s < MAX_SIZE and s - best < max(5, best // 20):
+        s += 1
+        if worst(s) <= cap:
+            best = s
+    return best
 
 
 def loss_table(army, armes, bouclier, tdc, cap, n=5000):

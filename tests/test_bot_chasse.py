@@ -220,3 +220,10 @@ def test_tranches_de_pertes_font_100():
     assert risque.buckets(losses, 100) == [(0, 25, 33.3), (26, 50, 16.7), (51, 75, 0), (76, 100, 50)]
     assert sum(p for *_, p in risque.buckets(Counter(range(7)), 100)) == 100
     assert risque.buckets(Counter({0: 2, 3: 1}), 2) == [(0, 0, 66.7), (1, 1, 0), (2, 3, 33.3)]   # petite limite
+
+
+def test_perte_pire_cas_irregulier():
+    """Le pire cas redescend parfois (194 cm² : 102, 196 cm² : 101) : 101 pertes doit trouver 197 cm², pas 193."""
+    army = {"jsn": 1087, "sn": 250, "ne": 28}
+    size = risque.max_loss_size(army, 1, 2, 4351, 101)
+    assert size == max(s for s in range(150, 260) if risque.stats(army, 4351, s, 1, 2, 5000)[2] <= 101)
