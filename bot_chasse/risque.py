@@ -338,6 +338,7 @@ def max_loss_size(army, armes, bouclier, tdc, cap, n=5000):
 
 def loss_table(army, armes, bouclier, tdc, cap, n=5000):
     """Une seule ligne : la plus grosse chasse avec au pire cap pertes. Sans réplique ni prochaines chasses."""
+    cap = min(cap, sum(army.values()) - 1)            # toute l'armée perdue = chasse perdue : jamais proposée
     head = [f"🎯 Chasse pour {fmt_n(cap)} pertes max",
             f"   ({army_text(army)}, Armes {armes}, Bouclier {bouclier}, TDC {fmt_n(tdc)})", ""]
     size = max_loss_size(army, armes, bouclier, tdc, cap, n)

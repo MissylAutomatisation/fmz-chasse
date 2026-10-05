@@ -201,3 +201,10 @@ def test_detail_des_pertes_selon_la_compo():
     assert risque.army_text(risque.dead(army, 100)) == "80 JSN + 20 SN"
     out = risque.answer("80 JSN + 1 200 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100").splitlines()
     assert out[-3].split("|")[-1].strip().isdigit() and out[-2].startswith("Pire cas : 80 JSN + ")
+
+
+def test_perte_jamais_une_chasse_perdue():
+    """Limite au-delà de l'armée : plafonnée à l'armée moins 1, la chasse reste gagnée."""
+    out = risque.answer("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100000").splitlines()
+    assert out[1] == "🎯 Chasse pour 1 306 pertes max"
+    assert int(out[-3].split()[0]) < 1000 and int(out[-3].split("|")[-1]) <= 1306
