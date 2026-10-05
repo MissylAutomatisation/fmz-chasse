@@ -344,12 +344,13 @@ def loss_table(army, armes, bouclier, tdc, cap, n=5000):
     if not size:
         return "\n".join(["```"] + head + [f"Aucune chasse possible avec au pire {fmt_n(cap)} pertes.", "```"])
     _, mean, worst = stats(army, tdc, size, armes, bouclier, n)
+    lost = dead(army, worst)
+    detail = [f"Pire cas : {army_text(lost)}"] if len(lost) > 1 else []     # plusieurs types d'unités touchés
     return "\n".join(["```"] + head + [
         " Chasse   | Pertes moy. | cm²/perte | Pire cas",
         "----------+-------------+-----------+---------",
-        f" {f'{size} cm²':<8} | {comma(mean):<11} | {comma(size / mean) if mean else 'sans perte':<9} | "
-        f"{army_text(dead(army, worst)) or 0}",
-        "```"])
+        f" {f'{size} cm²':<8} | {comma(mean):<11} | {comma(size / mean) if mean else 'sans perte':<9} | {worst}",
+        ] + detail + ["```"])
 
 
 def dead(army, k):
