@@ -134,6 +134,7 @@ def test_easter_egg_enorme_teub():
 def test_easter_egg_envoye_en_silencieux():
     src = (Path(__file__).resolve().parent.parent / "bot_chasse" / "bot.py").read_text(encoding="utf-8")
     assert "silent = reply == risque.ENORME_TEUB" in src and "silent=silent" in src
+    assert "SILENT_CHANNEL_IDS = {1556337362211053741}" in src and "in SILENT_CHANNEL_IDS" in src
 
 
 @pytest.mark.parametrize("word", ["replique", "réplique", "repliques", "répliques", "Réplique", "RÉPLIQUES"])
@@ -196,12 +197,12 @@ def test_perte_impossible():
     assert "Aucune chasse possible" in risque.answer("10 JSN, TDC 50 000, perte 0")
 
 
-def test_detail_des_pertes_selon_la_compo():
-    """Pire cas en unités : les JSN d'abord, puis les suivantes dans l'ordre du jeu."""
-    army = {"jsn": 80, "sn": 99}
-    assert risque.dead(army, 100) == {"jsn": 80, "sn": 20}
-    assert risque.dead(army, 50) == {"jsn": 50} and risque.dead(army, 0) == {}
-    assert risque.army_text(risque.dead(army, 100)) == "80 JSN + 20 SN"
+def test_detail_des_pertes_du_vrai_pire_combat():
+    """Pire cas en unités : le détail exact du pire combat, sa somme = le pire cas, même calcul sur 1 ou 4 cœurs."""
+    army = {"jsn": 80, "sn": 1200}
+    _, _, worst, _, units = risque.stats(army, 2770, 273, 1, 2, 5000)
+    assert sum(units.values()) == worst and units["jsn"] == 80 and units["sn"] > 0
+    assert risque._chunk(army, 2770, 273, 1, 2, 1, 0, 5000)[2] == units
     out = risque.answer("80 JSN + 1 200 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100").splitlines()
     assert out[-9].split("|")[-1].strip().isdigit() and out[-8].startswith("Pire cas : 80 JSN + ")
 
@@ -217,9 +218,22 @@ def test_perte_jamais_une_chasse_perdue():
 def test_tranches_de_pertes_font_100():
     from collections import Counter
     losses = Counter({0: 1, 10: 1, 30: 1, 99: 3})
-    assert risque.buckets(losses, 100) == [(0, 25, 33.3), (26, 50, 16.7), (51, 75, 0), (76, 100, 50)]
-    assert sum(p for *_, p in risque.buckets(Counter(range(7)), 100)) == 100
-    assert risque.buckets(Counter({0: 2, 3: 1}), 2) == [(0, 0, 66.7), (1, 1, 0), (2, 3, 33.3)]   # petite limite
+    assert risque.buckets(losses, 100) == [(0, 25, 33.3, 2), (26, 50, 16.7, 1), (51, 75, 0, 0), (76, 100, 50, 3)]
+    assert sum(p for _, _, p, _ in risque.buckets(Counter(range(7)), 100)) == 100
+    assert risque.buckets(Counter({0: 2, 3: 1}), 2) == [(0, 0, 66.7, 2), (1, 1, 0, 0), (2, 3, 33.3, 1)]   # petite limite
+
+
+def test_tranche_minuscule_pas_zero():
+    """1 chasse sur 5 000 : « < 0,1 % », pas « 0 % » ; une tranche vide reste à 0 %."""
+    from collections import Counter
+    rows = risque.buckets(Counter({0: 4999, 99: 1}), 100)
+    assert [(p, c) for _, _, p, c in rows] == [(100, 4999), (0, 0), (0, 0), (0, 1)]
+
+
+def test_message_pertes_collees_au_tdc():
+    out = risque.answer("1 208 JSN, Armes 1, TDC 2 770 100 pertes")
+    assert out.startswith("❌ TDC introuvable") and "mets une virgule avant" in out
+    assert "virgule" not in risque.answer("1 208 JSN, Armes 1")
 
 
 def test_perte_pire_cas_irregulier():

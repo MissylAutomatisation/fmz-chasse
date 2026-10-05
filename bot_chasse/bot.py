@@ -16,6 +16,7 @@ intents = discord.Intents.default()
 intents.message_content = True                                 # à activer aussi sur le portail Discord
 client = discord.Client(intents=intents)
 CHANNEL_IDS = {int(c) for c in os.getenv("CHANNEL_ID", "").replace(" ", "").split(",") if c}   # « id1,id2 » : un salon par serveur
+SILENT_CHANNEL_IDS = {1556337362211053741}                     # réponses sans notification
 
 
 @client.event
@@ -33,7 +34,7 @@ async def on_message(message: discord.Message):
         except Exception:
             logging.exception("calcul impossible pour %r", message.content)
             reply = "❌ Erreur pendant le calcul. Vérifie le texte collé."
-    silent = reply == risque.ENORME_TEUB                       # easter egg : message silencieux (pas de notification)
+    silent = reply == risque.ENORME_TEUB or message.channel.id in SILENT_CHANNEL_IDS   # pas de notification
     sent = await message.reply(reply, mention_author=False, silent=silent)
     if risque.WAIT_PLAN not in reply:
         return
