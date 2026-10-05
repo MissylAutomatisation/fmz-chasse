@@ -251,19 +251,21 @@ def best_ratio_size(marks, ratio):
 def key_rows(army, armes, bouclier, tdc, n=5000, rep=10):
     """Les lignes utiles [(taille, risque, pertes moy., pire cas, cm²/perte, symboles)] : 🛡 plus grosse chasse à
     1 % de risque, 📈 meilleur cm²/perte, ⭐ opti, 🔥 flemme. Une taille qui a plusieurs rôles cumule les symboles.
-    Le risque est celui de dépasser la réplique rep % : avec 30, les lignes étudiées sont plus grosses."""
+    Le risque est celui de dépasser la réplique rep % : avec 30, les lignes étudiées sont plus grosses. 📈 ne dépend
+    pas de rep (repères à 10 %) ; ⭐ et 🔥 se comparent au meilleur cm²/perte des lignes de rep."""
     def row(s):
         risk, mean, worst = stats(army, tdc, s, armes, bouclier, n, rep=rep)
         return s, risk, mean, worst, s / mean if mean else float("inf")             # cm² par JSN perdue
     rows = [row(s) for s in sizes(army, tdc, armes, bouclier, n, rep)]
     if not rows:
         return []
-    top = best_ratio_size([r[0] for r in rows], lambda s: row(s)[4])
-    if top not in [r[0] for r in rows]:
+    base = [r[0] for r in rows] if rep == 10 else sizes(army, tdc, armes, bouclier, n, 10) or [r[0] for r in rows]
+    top = best_ratio_size(base, lambda s: row(s)[4])
+    if rep == 10 and top not in [r[0] for r in rows]:
         rows = sorted(rows + [row(top)])
     marks = star_sizes(army, tdc, armes, bouclier, rows, n)
     roles = {}
-    for s, symbol in [(rows[0][0], "🛡"), (max(rows, key=lambda r: r[4])[0], "📈")] + [(s, m) for s, m in marks.items()]:
+    for s, symbol in [(rows[0][0], "🛡"), (top, "📈")] + [(s, m) for s, m in marks.items()]:
         roles[s] = roles.get(s, "") + symbol
     if "🔥" not in "".join(roles.values()):                                 # 🔥 sur la même taille que ⭐
         roles[next(s for s, m in marks.items() if m == "⭐")] += "🔥"
@@ -314,7 +316,8 @@ def table(army, armes, bouclier, tdc, n=5000, plan=True, rep=10):
         lines.append(f" {f'{s} cm²':<7} | {fmt_pct(risk):<15} | {comma(mean):<11} | "
                      f"{comma(per_loss) if mean else 'sans perte':<9} | {str(worst):<8} {roles}")
     lines += ["🛡 min. pertes  📈 meilleur cm²/perte",
-              f"⭐ opti ({round(STARS[0][0] * 100)} % du meilleur)  🔥 flemme ({round(STARS[1][0] * 100)} %)"]
+              f"⭐ opti ({round(STARS[0][0] * 100)} % du meilleur{f' en réplique {rep} %' if rep != 10 else ''})  "
+              f"🔥 flemme ({round(STARS[1][0] * 100)} %)"]
     if not plan:
         return "\n".join(lines + ["", WAIT_PLAN, "```"])
     plan, army_after, tdc_after = next_hunts(army, armes, bouclier, tdc, n, rep)

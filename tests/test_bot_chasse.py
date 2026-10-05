@@ -156,3 +156,13 @@ def test_tableau_replique_30():
     assert "Réplique > 30 %" in rep30 and "🎯 Chasses conseillées (réplique 30 %)" in rep30
     first = lambda out: int(next(l for l in out.splitlines() if "🛡" in l and "|" in l).split()[0])
     assert first(rep30) > first(normal) + 30
+
+
+def test_vrai_meilleur_ratio_avec_replique_30():
+    """📈 ne dépend pas de la réplique comptée : même taille qu'en 10 %. ⭐ reste propre au tableau 30 %."""
+    army = {"jsn": 1208, "sn": 99}
+    normal, rep30 = risque.key_rows(army, 1, 2, 2770), risque.key_rows(army, 1, 2, 2770, rep=30)
+    best = lambda rows: next(r[0] for r in rows if "📈" in r[5])
+    star = lambda rows: next(r[0] for r in rows if "⭐" in r[5])
+    assert best(rep30) == best(normal) and star(rep30) > star(normal) + 15
+    assert "🛡" in next(r for r in rep30 if r[0] > best(normal))[5]
