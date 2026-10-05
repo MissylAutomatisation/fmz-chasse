@@ -79,8 +79,7 @@ def test_etoile_sur_la_plus_grosse_chasse_rentable():
 
 
 def test_meilleur_ratio_vraiment_le_meilleur():
-    """Sardi (05/10) : 📈 sautait de 100 (B3) à 85 cm² (B4), seules les tailles repères étaient comparées.
-    Le vrai sommet est vers 95 cm² dans les deux cas : le bouclier ne doit pas le faire reculer."""
+    """📈 = vrai sommet du cm²/perte (~95 cm² ici), pas la meilleure taille repère : le bouclier ne le fait pas reculer."""
     army = {"jsn": 944, "sn": 184, "ne": 1, "js": 219, "s": 2}
     best = {}
     for bouclier in (3, 4):

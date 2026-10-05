@@ -1,7 +1,7 @@
 """Chasse réaliste par tirages (Monte-Carlo), repris du moteur de https://fourmizzz-zero-perte.pages.dev/ (2026-10-03).
 
 Même formule de difficulté que sim_start.py, mais les prédateurs sont tirés au hasard comme dans le jeu (chenilles,
-guêpes, abeilles...) au lieu de « que des petites araignées ». Ce moteur collait aux RC de Martin (31 cm² à 1 100 TDC :
+guêpes, abeilles...) au lieu de « que des petites araignées ». Ce moteur colle aux RC du S5 (31 cm² à 1 100 TDC :
 1,4 perte en moyenne). Sert à proposer des tailles de chasse pour une armée réelle.
 """
 import math

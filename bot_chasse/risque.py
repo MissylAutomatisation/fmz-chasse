@@ -36,9 +36,9 @@ UNIT_WORDS = [(r"jeunes?\s+soldates?\s+naines?", "jsn", False), (r"jeunes?\s+sol
 UNIT_ORDER = list(hunt_mc.UNITS)                     # affichage dans l'ordre du jeu
 LEVEL_WORDS = [(r"bouc\w*(?:\s+thoraciques?)?", "bouclier"), (r"arm\w*", "armes")]
 TDC_WORDS = r"tdc|terrains?(?:\s+de\s+chasse)?|cm²|cm2|cm"
-TARGETS = (1, 2, 5, 7.5, 10, 15, 20)                          # niveaux de risque (%) étudiés pour le meilleur cm²/perte
+TARGETS = (1, 2, 5, 7.5, 10, 15, 20)                          # niveaux de risque (%) des tailles repères
 MAX_SIZE = 5000
-STARS = ((0.85, "⭐"), (0.80, "🔥"))               # plus grosse chasse qui garde 85 % / 80 % du meilleur cm²/perte (Martin)
+STARS = ((0.85, "⭐"), (0.80, "🔥"))               # plus grosse chasse qui garde 85 % / 80 % du meilleur cm²/perte
 NEXT_HUNTS = 5                                       # chasses ⭐ prévues à la suite, pire cas de pertes retiré à chaque fois
 REPLIQUES = {10: 3, 30: 2, 50: 1.5}                  # réplique comptée (%) -> l'attaque doit dépasser ce multiple de la vie
 REPLIQUE_WORDS = r"r[ée]pli(?:que)?s?\s*[:=]?\s*(\d+)\s*%?"   # « réplique 30 », « Replique: 50 % », « répli 30 »
@@ -239,9 +239,8 @@ def star_sizes(army, tdc, armes, bouclier, rows, n=5000):         # même n que 
 
 
 def best_ratio_size(marks, ratio):
-    """Taille au meilleur cm²/perte. Les tailles repères (marks, croissantes) ne servent qu'à encadrer : le sommet
-    est souvent entre deux, et la courbe a des petites bosses. On balaie de la 1re à la dernière repère (sous 1 % de
-    risque, le rendement monte avec la taille), puis on affine au cm² près. À égalité, la plus grosse chasse."""
+    """Taille au meilleur cm²/perte, entre la 1re et la dernière taille repère (marks, croissantes) : balayage puis
+    affinage au cm² près. À égalité, la plus grosse chasse."""
     key = lambda s: (ratio(s), s)
     lo, hi = marks[0], marks[-1]
     step = max(1, (hi - lo) // 25)
@@ -346,7 +345,7 @@ ENORME_TEUB = r"""```
 
 def answer(text, plan=True):
     """Réponse du bot à un texte collé (tableau, ou message d'erreur). plan=False : sans les prochaines chasses."""
-    if re.search(r"[ée]norme\s+teub", text, re.IGNORECASE):     # easter egg demandé par Martin
+    if re.search(r"[ée]norme\s+teub", text, re.IGNORECASE):     # easter egg
         return ENORME_TEUB
     try:
         rep, text = replique(text)
