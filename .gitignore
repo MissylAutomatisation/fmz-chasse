@@ -1,0 +1,13 @@
+# Dépôt limité au bot Discord Fmz-Chasse : tout est ignoré sauf ses fichiers
+/*
+!/.gitignore
+!/bot_chasse/
+!/tools/
+/tools/*
+!/tools/hunt_mc.py
+!/tests/
+/tests/*
+!/tests/test_bot_chasse.py
+.env
+__pycache__/
+*.bak

@@ -1,0 +1,13 @@
+[Unit]
+Description=Bot Discord Chasse (risque selon la taille de chasse)
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+User=martin
+WorkingDirectory=/home/martin/MyProjects/bot_chasse
+ExecStart=/home/martin/MyProjects/bot_chasse/venv/bin/python -u bot.py
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
