@@ -241,3 +241,40 @@ def test_perte_pire_cas_irregulier():
     army = {"jsn": 1087, "sn": 250, "ne": 28}
     size = risque.max_loss_size(army, 1, 2, 4351, 101)
     assert size == max(s for s in range(150, 260) if risque.stats(army, 4351, s, 1, 2, 5000)[2] <= 101)
+
+
+# --- /niveau : rentabilité d'Armes ---
+import niveau  # noqa: E402
+
+ARMY_05_10 = "989 JSN + 252 SN + 2 NE + 240 JS + 3 S"
+
+
+def test_niveau_commande_reconnue():
+    assert niveau.is_command("/niveau 100 JSN, Armes 1")
+    assert niveau.is_command("Niveau 100 JSN")
+    assert not niveau.is_command("100 JSN, Armes 1, TDC 500")
+
+
+def test_niveau_calcul_armee_du_05_10():
+    """FDF de base 6 686 ; Armes 3 (320 OV) : +669 contre 320 × 60 s de ponte de la même armée à Armes 2."""
+    army, armes, _, tdc = risque.parse(ARMY_05_10 + ", Armes 2", need_tdc=False)
+    assert tdc is None and niveau.base_fdf(army) == 6686
+    rows = niveau.levels(army, armes)
+    assert [r[:2] for r in rows] == [(3, 320), (4, 640), (5, 1280)]
+    assert rows[0][2] == pytest.approx(668.6)
+    ponte_s = 989 * 300 + 252 * 450 + 2 * 570 + 240 * 740 + 3 * 1000
+    assert rows[0][3] == pytest.approx(320 * 60 * 6686 / ponte_s * 1.2)
+    assert rows[1][4] > 1 > rows[2][4]                     # Armes 4 encore rentable, Armes 5 non
+
+
+def test_niveau_seuil_rend_le_ratio_egal_a_1():
+    army = {"js": 500}
+    seuil = niveau.threshold(army, 2)
+    assert niveau.levels({"js": seuil / 10}, 2, 1)[0][4] == pytest.approx(1)
+
+
+def test_niveau_reponse_discord():
+    out = niveau.answer("/niveau " + ARMY_05_10 + ", Armes 2")
+    assert out.startswith("```") and out.endswith("```")
+    assert "Armes 3 | 320" in out and "✅" in out and "❌" in out
+    assert niveau.answer("/niveau Armes 2").startswith("❌ Aucune unité")

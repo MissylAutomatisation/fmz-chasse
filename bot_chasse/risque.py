@@ -69,8 +69,8 @@ def take(text, word, num, after_first, case=False, both=True):
     return found, text
 
 
-def parse(text):
-    """Texte libre -> (armée {"jsn": n, "sn": n, "js": n}, armes, bouclier, tdc).
+def parse(text, need_tdc=True):
+    """Texte libre -> (armée {"jsn": n, "sn": n, "js": n}, armes, bouclier, tdc ; None si absent et need_tdc=False).
 
     Insensible aux majuscules, au pluriel et à l'ordre : « Armes 1 », « 1 armes », « arme: 1 », « TDC 2 770 »,
     « 2770 cm² », « 1 208 JSN », « JSN 1208 », « 1 208 Jeunes Soldates Naines »...
@@ -91,9 +91,9 @@ def parse(text):
     army = {u: found_army[u] for u in UNIT_ORDER if u in found_army}         # dans l'ordre du jeu
     if not army:
         raise ParseError("Aucune unité trouvée. Unités possibles : JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE.")
-    if not tdc:
+    if not tdc and need_tdc:
         raise ParseError("TDC introuvable. Exemple : TDC 2 770")
-    return army, levels["armes"], levels["bouclier"], tdc[0]
+    return army, levels["armes"], levels["bouclier"], tdc[0] if tdc else None
 
 
 _STATS = {}

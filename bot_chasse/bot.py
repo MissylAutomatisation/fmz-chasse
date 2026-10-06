@@ -7,6 +7,7 @@ import os
 import discord
 from dotenv import load_dotenv
 
+import niveau
 import risque
 
 load_dotenv()
@@ -27,6 +28,14 @@ async def on_ready():
 @client.event
 async def on_message(message: discord.Message):
     if message.author.bot or message.channel.id not in CHANNEL_IDS:
+        return
+    if niveau.is_command(message.content):                     # « /niveau … » : rentabilité d'Armes, calcul instantané
+        try:
+            reply = niveau.answer(message.content)
+        except Exception:
+            logging.exception("calcul /niveau impossible pour %r", message.content)
+            reply = "❌ Erreur pendant le calcul. Vérifie le texte collé."
+        await message.reply(reply, mention_author=False, silent=message.channel.id in SILENT_CHANNEL_IDS)
         return
     async with message.channel.typing():                       # le calcul prend quelques secondes
         try:

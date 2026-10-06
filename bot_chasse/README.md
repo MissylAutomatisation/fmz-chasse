@@ -10,10 +10,19 @@ Ajoute `réplique 30` (ou `réplique 50`) pour compter le risque sur la répliqu
 
 Ajoute `perte 100` pour avoir seulement la plus grosse chasse dont le **pire cas** reste ≤ 100 pertes : une ligne (Chasse, Pertes moy., cm²/perte, Pire cas), puis « 📊 Chances selon les pertes » : 4 tranches égales de 0 à la limite (`BUCKETS`), avec le % des chasses dans chacune (total 100 %), sans réplique ni prochaines chasses. Si le pire cas touche d'autres unités que les JSN, une ligne en dessous donne le détail exact du pire combat (« Pire cas : 80 JSN + 20 SN »). Une tranche presque vide affiche « < 0,1 % » (0 % = jamais). Une limite égale ou plus grande que l'armée est ramenée à l'armée moins 1 : une chasse perdue n'est jamais proposée. Écritures acceptées : perte 100, pertes 100, perte max 100, pertes: 100, 100 pertes.
 
+`/niveau` (ou `niveau`) en début de message : rentabilité du niveau d'Armes suivant, sans TDC.
+
+```
+/niveau 989 JSN + 252 SN + 240 JS, Armes 2
+```
+
+Le bot compare, pour les 3 niveaux suivants, le gain (+10 % de la FDF de base) avec la FDF qu'on aurait en pondant la même armée pendant le temps des ouvrières dépensées (80 × 2^N OV, 60 s chacune). ✅ si le niveau rapporte plus, ❌ sinon. Instantané : les pontes futures ne comptent pas. Le TDP s'annule, les 🍎 et 🪵 ne comptent pas.
+
 Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates Naines… »). Unités : toutes (JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE), noms longs ou abréviations ; S, C et A seuls en majuscule. Armes et Bouclier absents = niveau 0. Le TDC est obligatoire.
 
 ## Fichiers
 - `risque.py` : lecture du texte et calcul (moteur `hunt_mc.py`, copié depuis `tools/`). Essai : `python risque.py "948 JSN, Armes 2, Bouclier 2, TDC 2 148"`.
+- `niveau.py` : commande `/niveau` (rentabilité d'Armes).
 - `bot.py` : le bot (lit les salons de `CHANNEL_ID`, séparés par des virgules : un salon par serveur Discord). Dans les salons de `SILENT_CHANNEL_IDS`, il répond sans notification.
 - `.env` (sur le Pi seulement, secret) : `DISCORD_TOKEN=…` et `CHANNEL_ID=…`.
 - `bot-chasse.service` : service systemd (redémarre tout seul).
@@ -26,7 +35,7 @@ Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates
 ## Mettre à jour
 Depuis le PC, dans `bot_chasse/` :
 ```
-scp bot.py risque.py ../tools/hunt_mc.py raspberrypi:MyProjects/bot_chasse/
+scp bot.py risque.py niveau.py ../tools/hunt_mc.py raspberrypi:MyProjects/bot_chasse/
 ssh raspberrypi sudo systemctl restart bot-chasse
 ```
 
