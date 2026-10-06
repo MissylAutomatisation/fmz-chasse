@@ -278,3 +278,16 @@ def test_niveau_reponse_discord():
     assert out.startswith("```") and out.endswith("```")
     assert "Armes 3 | 320" in out and "✅" in out and "❌" in out
     assert niveau.answer("/niveau Armes 2").startswith("❌ Aucune unité")
+
+
+def test_niveau_unite_pondue():
+    assert niveau.pondue("100 JSN, Armes 2, ponte JS")[0] == "js"
+    assert niveau.pondue("100 JSN, pond des Jeunes Soldates Naines")[0] == "jsn"
+    assert niveau.pondue("100 JSN, ponte: Tank")[0] == "tk"
+    assert niveau.pondue("100 JSN, ponte S")[0] == "s"
+    assert niveau.pondue("100 JSN, Armes 2")[0] is None
+    army = {"jsn": 1000}
+    js = niveau.levels(army, 2, 1, "js")[0]
+    assert js[3] == pytest.approx(320 * 60 * 10 / 740 * 1.2)            # 320 OV en temps de ponte de JS
+    out = niveau.answer("/niveau 1 000 JSN, Armes 2, ponte JS")
+    assert "en pondant des JS" in out and "(1 000 JSN, Armes 2)" in out
