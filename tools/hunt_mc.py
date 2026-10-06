@@ -64,7 +64,7 @@ def fight(army, prey, armes=0, bouclier=0):
 def fight_losses(army, prey, armes=0, bouclier=0):
     """Comme fight, mais les pertes par type d'unité : {"jsn": 1, ...} (toute l'armée si la chasse est perdue)."""
     order = [u for u in UNITS if army.get(u)]                     # ordre du jeu : JSN, SN, NE, JS, S, C...
-    hp = {u: UNITS[u][0] * (1 + 0.1 * bouclier) for u in order}
+    hp = {u: UNITS[u][0] + (UNITS[u][0] * bouclier + 5) // 10 for u in order}   # vie arrondie par unité (toolzzz)
     att = {u: UNITS[u][1] * (1 + 0.1 * armes) for u in order}
     pool = {u: army[u] * hp[u] for u in order}
     preys = [(PREY[i][1], PREY[i][2], prey[i] * PREY[i][2]) for i in range(len(PREY)) if prey[i]]
