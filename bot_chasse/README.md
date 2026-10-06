@@ -10,13 +10,17 @@ Ajoute `réplique 30` (ou `réplique 50`) pour compter le risque sur la répliqu
 
 Ajoute `perte 100` pour avoir seulement la plus grosse chasse dont le **pire cas** reste ≤ 100 pertes : une ligne (Chasse, Pertes moy., cm²/perte, Pire cas), puis « 📊 Chances selon les pertes » : 4 tranches égales de 0 à la limite (`BUCKETS`), avec le % des chasses dans chacune (total 100 %), sans réplique ni prochaines chasses. Si le pire cas touche d'autres unités que les JSN, une ligne en dessous donne le détail exact du pire combat (« Pire cas : 80 JSN + 20 SN »). Une tranche presque vide affiche « < 0,1 % » (0 % = jamais). Une limite égale ou plus grande que l'armée est ramenée à l'armée moins 1 : une chasse perdue n'est jamais proposée. Écritures acceptées : perte 100, pertes 100, perte max 100, pertes: 100, 100 pertes.
 
-`/niveau` (ou `niveau`) en début de message : rentabilité du niveau d'Armes suivant, sans TDC.
+`/niveau` (ou `niveau`) en début de message : niveaux rentables d'Armes et de Bouclier, sans TDC ni niveau actuel.
 
 ```
-/niveau 989 JSN + 252 SN + 240 JS, Armes 2, ponte JS
+/niveau 989 JSN + 252 SN + 240 JS
 ```
 
-Le bot compare, pour les 3 niveaux suivants, le gain (+10 % de la FDF de base) avec la FDF qu'on aurait en pondant l'unité choisie (`ponte JS`, `pond des Tanks`…) ou, sans elle, la même armée pendant le temps des ouvrières dépensées (80 × 2^N OV, 60 s chacune). ✅ si le niveau rapporte plus, ❌ sinon. Instantané : les pontes futures ne comptent pas. Le TDP s'annule, les 🍎 et 🪵 ne comptent pas.
+Chaque niveau coûte 80 × 2^N ouvrières (60 s de ponte chacune). Le bot compare ce qu'il rapporte avec ce qu'aurait donné la ponte de ces ouvrières :
+- **Armes** : +10 % de la FDF de base, contre la FDF pondue en Armée (même mélange), JSN, SN, NE, JS, S, A, Tk ou Tu. Une ligne par unité : niveau max rentable et % du niveau suivant (100 % = égal).
+- **Bouclier** : vie gagnée, arrondie par unité comme le jeu (base + arrondi(base × niveau / 10)), contre la vie de JSN pondues. Un niveau sans gain d'arrondi est pris avec les suivants s'ils sont rentables ensemble.
+
+Armée figée (les pontes futures ne comptent pas). Le TDP s'annule ; les 🍎 et 🪵 ne comptent pas. Si Armes ou Bouclier sont donnés, le bot rappelle « tu es à N ».
 
 Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates Naines… »). Unités : toutes (JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE), noms longs ou abréviations ; S, C et A seuls en majuscule. Armes et Bouclier absents = niveau 0. Le TDC est obligatoire.
 

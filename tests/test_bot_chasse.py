@@ -243,7 +243,7 @@ def test_perte_pire_cas_irregulier():
     assert size == max(s for s in range(150, 260) if risque.stats(army, 4351, s, 1, 2, 5000)[2] <= 101)
 
 
-# --- /niveau : rentabilité d'Armes ---
+# --- /niveau : niveaux rentables d'Armes et de Bouclier ---
 import niveau  # noqa: E402
 
 ARMY_05_10 = "989 JSN + 252 SN + 2 NE + 240 JS + 3 S"
@@ -255,39 +255,40 @@ def test_niveau_commande_reconnue():
     assert not niveau.is_command("100 JSN, Armes 1, TDC 500")
 
 
-def test_niveau_calcul_armee_du_05_10():
-    """FDF de base 6 686 ; Armes 3 (320 OV) : +669 contre 320 × 60 s de ponte de la même armée à Armes 2."""
-    army, armes, _, tdc = risque.parse(ARMY_05_10 + ", Armes 2", need_tdc=False)
-    assert tdc is None and niveau.base_fdf(army) == 6686
-    rows = niveau.levels(army, armes)
-    assert [r[:2] for r in rows] == [(3, 320), (4, 640), (5, 1280)]
-    assert rows[0][2] == pytest.approx(668.6)
-    ponte_s = 989 * 300 + 252 * 450 + 2 * 570 + 240 * 740 + 3 * 1000
-    assert rows[0][3] == pytest.approx(320 * 60 * 6686 / ponte_s * 1.2)
-    assert rows[1][4] > 1 > rows[2][4]                     # Armes 4 encore rentable, Armes 5 non
+def test_niveau_ratio_armes_3_en_js():
+    """Armée du 05/10 (FDF 6 686) : Armes 3 = +669 contre 320 OV × 60 s de ponte de JS à Armes 2."""
+    army, *_ = risque.parse(ARMY_05_10, need_tdc=False)
+    assert niveau.base_fdf(army) == 6686
+    rate = niveau.per_second(niveau.base_fdf, {"js": 1})
+    assert niveau.ratio(668.6, rate, 3) == pytest.approx(668.6 / (320 * 60 * 10 / 740 * 1.2))
 
 
-def test_niveau_seuil_rend_le_ratio_egal_a_1():
-    army = {"js": 500}
-    seuil = niveau.threshold(army, 2)
-    assert niveau.levels({"js": seuil / 10}, 2, 1)[0][4] == pytest.approx(1)
+def test_niveau_max_rentable_par_unite():
+    army, *_ = risque.parse(ARMY_05_10, need_tdc=False)
+    rows = {name: (lvl, nxt) for name, lvl, nxt in niveau.armes_rows(army)}
+    assert rows["JS"][0] == 3 and 0.95 < rows["JS"][1] < 1         # Armes 4 tout juste pas rentable en JS
+    assert rows["Armée"][0] == 4                                   # mélange de l'armée : moins de FDF par heure
+    assert rows["Tk"][0] < rows["JS"][0] < rows["JSN"][0]          # plus l'unité frappe vite, moins Armes vaut
+    for lvl, nxt in rows.values():
+        assert nxt < 1
+
+
+def test_niveau_vie_arrondie_comme_toolzzz():
+    assert [niveau.life("jsn", b) for b in range(6)] == [8, 9, 10, 10, 11, 12]
+    assert niveau.life("ne", 5) == 13 + 7                          # 6,5 arrondi vers le haut
+
+
+def test_niveau_bouclier_compare_a_la_jsn():
+    army = {"jsn": 1000}
+    # Bouclier 1 : +1 000 PV contre 80 OV × 60 s / 300 s = 16 JSN de 8 PV
+    assert niveau.bouclier_ratio(army, 0, 1) == pytest.approx(1000 / (16 * 8))
+    assert niveau.bouclier_ratio(army, 2, 3) == 0                  # JSN : 10 PV au Bouclier 2 et 3
+    lvl, nxt = niveau.bouclier_level(army)
+    assert nxt < 1 and any(niveau.bouclier_ratio(army, lvl - j, lvl) >= 1 for j in (1, 2, 3))
 
 
 def test_niveau_reponse_discord():
     out = niveau.answer("/niveau " + ARMY_05_10 + ", Armes 2")
     assert out.startswith("```") and out.endswith("```")
-    assert "Armes 3 | 320" in out and "✅" in out and "❌" in out
+    assert "(tu es à 2)" in out and " JS          | Armes 3" in out and "Bouclier " in out
     assert niveau.answer("/niveau Armes 2").startswith("❌ Aucune unité")
-
-
-def test_niveau_unite_pondue():
-    assert niveau.pondue("100 JSN, Armes 2, ponte JS")[0] == "js"
-    assert niveau.pondue("100 JSN, pond des Jeunes Soldates Naines")[0] == "jsn"
-    assert niveau.pondue("100 JSN, ponte: Tank")[0] == "tk"
-    assert niveau.pondue("100 JSN, ponte S")[0] == "s"
-    assert niveau.pondue("100 JSN, Armes 2")[0] is None
-    army = {"jsn": 1000}
-    js = niveau.levels(army, 2, 1, "js")[0]
-    assert js[3] == pytest.approx(320 * 60 * 10 / 740 * 1.2)            # 320 OV en temps de ponte de JS
-    out = niveau.answer("/niveau 1 000 JSN, Armes 2, ponte JS")
-    assert "en pondant des JS" in out and "(1 000 JSN, Armes 2)" in out

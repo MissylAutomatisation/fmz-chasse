@@ -1,22 +1,25 @@
-"""Rentabilité d'Armes : « /niveau 989 JSN + 252 SN + 240 JS, Armes 2, ponte JS » -> niveau suivant ou ponte ?
+"""Niveaux rentables d'Armes et de Bouclier : « /niveau 989 JSN + 252 SN + 240 JS » -> tableau par unité pondue.
 
-Instantané, en FDF (force de frappe). Le niveau N -> N+1 donne +10 % de la FDF de base et coûte 80 × 2^N ouvrières.
-Ces ouvrières valent 80 × 2^N × 60 s de ponte : on compare avec la FDF qu'aurait donnée la même durée de ponte de
-l'unité pondue (« ponte JS ») ou, sans elle, de l'armée collée (même mélange d'unités), au bonus d'Armes actuel.
-Le TDP accélère ouvrières et unités pareil : il s'annule. Les 🍎 et 🪵 de la recherche ne comptent pas (le coût
-limitant, ce sont les ouvrières).
+Armes et Bouclier coûtent 80 × 2^N ouvrières pour passer de N à N+1, soit 80 × 2^N × 60 s de ponte. On compare :
+- Armes : +10 % de la FDF de base de l'armée, contre la FDF qu'aurait donnée la même durée de ponte de chaque unité
+  (ou du mélange de l'armée), au bonus du niveau N ;
+- Bouclier : vie gagnée (arrondie par unité : base + arrondi(base × niveau / 10), comme toolzzz), contre la vie
+  de la même durée de ponte de JSN au Bouclier N (le tampon des pertes).
+Armée figée : les pontes futures ne comptent pas. Le TDP accélère ouvrières et unités pareil : il s'annule. Les 🍎
+et 🪵 ne comptent pas (le coût limitant, ce sont les ouvrières).
 """
 import re
 
 import risque
 
 COMMAND = r"^\s*/?niveaux?\b"                        # « /niveau … » ou « niveau … » en début de message
-PONTE_WORDS = r"\bpon(?:te|ds|d)?\s*[:=]?\s*(?:des?\s+|en\s+)?"   # « ponte JS », « pond des JS », « ponte: Tank »
-OV_COST = 80                                         # ouvrières d'Armes 1, × 2 à chaque niveau
+OV_COST = 80                                         # ouvrières d'Armes 1 et de Bouclier 1, × 2 à chaque niveau
 OV_PONTE = 60                                        # ponte d'une ouvrière (s, base)
 PONTE = {"jsn": 300, "sn": 450, "ne": 570, "js": 740, "s": 1000, "c": 1410, "ce": 1410, "a": 1440, "ae": 1520,
          "se": 1450, "tk": 1860, "tke": 1860, "tu": 2740, "tue": 2740}   # ponte de base (s), sheet et toolzzz
-SHOWN = 3                                            # niveaux affichés à partir du suivant
+COMPARED = ("jsn", "sn", "ne", "js", "s", "a", "tk", "tu")   # unités pondables qui attaquent (pas C, ni élites)
+MAX_LEVEL = 60
+MAX_JUMP = 3                                         # Bouclier : niveaux pris d'un coup (paliers sans gain d'arrondi)
 
 
 def is_command(text):
@@ -27,58 +30,81 @@ def base_fdf(army):
     return sum(risque.hunt_mc.UNITS[u][1] * k for u, k in army.items())
 
 
-def pondue(text):
-    """(unité pondue ou None, texte sans « ponte XX »)."""
-    for word, unit, case in risque.UNIT_WORDS:        # noms longs d'abord
-        pattern = PONTE_WORDS + rf"(?:{word})\b"
-        m = re.search(pattern, text, re.I) if not case else re.search(rf"(?i:{PONTE_WORDS})(?:{word})\b", text)
-        if m:
-            return unit, text[:m.start()] + " ; " + text[m.end():]
-    return None, text
+def base_life(army):
+    return sum(risque.hunt_mc.UNITS[u][0] * k for u, k in army.items())
 
 
-def levels(army, armes, shown=SHOWN, unit=None):
-    """[(niveau visé, coût OV, gain FDF, FDF si on pond à la place, ratio gain / ponte)].
-
-    La ponte est celle de unit, ou du mélange de l'armée si unit est None."""
-    fdf = base_fdf(army)
-    laid = {unit: 1} if unit else army
-    fdf_per_s = base_fdf(laid) / sum(PONTE[u] * k for u, k in laid.items())   # FDF de base par seconde de ponte
-    rows = []
-    for n in range(armes, armes + shown):
-        ov = OV_COST * 2 ** n
-        gain = fdf * 0.1
-        ponte = ov * OV_PONTE * fdf_per_s * (1 + n / 10)                # unités pondues au bonus actuel
-        rows.append((n + 1, ov, gain, ponte, gain / ponte))
-    return rows
+def per_second(total, laid):
+    """Stat de base par seconde de ponte de l'armée laid ({unité: nombre})."""
+    return total(laid) / sum(PONTE[u] * k for u, k in laid.items())
 
 
-def threshold(army, armes, unit=None):
-    """FDF de base à partir de laquelle Armes armes+1 est rentable."""
-    _, ov, gain, ponte, _ = levels(army, armes, 1, unit)[0]
-    return base_fdf(army) * ponte / gain
+def ratio(gain, rate, level):
+    """Gain du niveau level (depuis level − 1) divisé par la stat que donnerait la ponte de ses ouvrières."""
+    n = level - 1
+    return gain / (OV_COST * 2 ** n * OV_PONTE * rate * (1 + n / 10))
+
+
+def best_level(gain, rate):
+    """(niveau max rentable, ratio du niveau suivant). Le ratio est divisé par ~2 à chaque niveau."""
+    level = 0
+    while level < MAX_LEVEL and ratio(gain, rate, level + 1) >= 1:
+        level += 1
+    return level, ratio(gain, rate, level + 1)
+
+
+def armes_rows(army):
+    """[(nom, niveau max, ratio du suivant)] : l'armée (même mélange) puis chaque unité de COMPARED."""
+    gain = base_fdf(army) * 0.1
+    laids = [("Armée", army)] + [(risque.SHORT[u], {u: 1}) for u in COMPARED]
+    return [(name, *best_level(gain, per_second(base_fdf, laid))) for name, laid in laids]
+
+
+def life(unit, level):
+    """Vie d'une unité au Bouclier level : base + arrondi(base × level / 10), 0,5 vers le haut."""
+    base = risque.hunt_mc.UNITS[unit][0]
+    return base + (base * level + 5) // 10
+
+
+def bouclier_ratio(army, start, end):
+    """Vie gagnée de start à end, divisée par la vie des JSN pondues avec les ouvrières de chaque niveau."""
+    gain = sum(k * (life(u, end) - life(u, start)) for u, k in army.items())
+    ponte = sum(OV_COST * 2 ** n * OV_PONTE / PONTE["jsn"] * life("jsn", n) for n in range(start, end))
+    return gain / ponte
+
+
+def bouclier_level(army):
+    """(niveau max rentable, ratio du niveau suivant). Un niveau sans gain (arrondi) est pris avec les suivants
+    s'ils sont rentables ensemble (jusqu'à MAX_JUMP d'un coup)."""
+    level = 0
+    while level < MAX_LEVEL:
+        jump = next((j for j in range(1, MAX_JUMP + 1) if bouclier_ratio(army, level, level + j) >= 1), None)
+        if jump is None:
+            break
+        level += jump
+    return level, max(bouclier_ratio(army, level, level + j) for j in range(1, MAX_JUMP + 1))
+
+
+def pct(r):
+    return f"{round(r * 100)} %"
 
 
 def answer(text):
-    unit, text = pondue(re.sub(COMMAND, " ", text, flags=re.I))
     try:
-        army, armes, _, _ = risque.parse(text, need_tdc=False)
+        army, armes, bouclier, _ = risque.parse(re.sub(COMMAND, " ", text, flags=re.I), need_tdc=False)
     except risque.ParseError as e:
-        return f"❌ {e}\nExemple : `/niveau 989 JSN + 252 SN + 240 JS, Armes 2, ponte JS`"
+        return f"❌ {e}\nExemple : `/niveau 989 JSN + 252 SN + 240 JS`"
     fmt = risque.fmt_n
-    laid = f"des {risque.SHORT[unit]}" if unit else "ton armée (même mélange)"
-    lines = ["```", "⚔️ Rentabilité d'Armes (FDF)",
-             f"   ({risque.army_text(army)}, Armes {armes})",
-             f"   FDF de base {fmt(base_fdf(army))}, avec Armes {armes} : {fmt(round(base_fdf(army) * (1 + armes / 10)))}", "",
-             " Niveau  | Coût OV | Gain FDF | Si ponte | Verdict",
-             "---------+---------+----------+----------+---------"]
-    for lvl, ov, gain, ponte, ratio in levels(army, armes, unit=unit):
-        shown = f"×{ratio:.2f}".replace(".", ",")                       # 2 décimales : ×0,99 n'affiche pas ×1,0
-        verdict = f"✅ {shown}" if ratio >= 1 else f"❌ {shown}"
-        lines.append(f" Armes {lvl:<2}| {fmt(ov):<7} | +{fmt(round(gain)):<7} | +{fmt(round(ponte)):<7} | {verdict}")
-    lines += ["", f"Armes {armes + 1} rentable dès {fmt(round(threshold(army, armes, unit)))} de FDF de base.",
-              f"Si ponte = FDF qu'on aurait en pondant {laid}",
-              "pendant le temps des OV dépensées (60 s par OV)."]
-    if not unit:
-        lines.append("Ajoute « ponte JS » (ou autre) pour choisir l'unité.")
+    now = lambda lvl: f" (tu es à {lvl})" if lvl else ""
+    lines = ["```", "⚔️ Niveaux rentables", f"   ({risque.army_text(army)})", "",
+             f"Armes : FDF de base {fmt(base_fdf(army))}{now(armes)}",
+             " Si tu ponds | Max rentable | Niveau suivant",
+             "-------------+--------------+---------------"]
+    for name, lvl, nxt in armes_rows(army):
+        lines.append(f" {name:<11} | Armes {lvl:<6} | {pct(nxt)}")
+    lvl, nxt = bouclier_level(army)
+    lines += ["", f"Bouclier : vie de base {fmt(base_life(army))}{now(bouclier)}",
+              f" Comparé à la ponte de JSN : Bouclier {lvl} max (suivant : {pct(nxt)})", "",
+              "Niveau suivant = ce qu'il rapporte par rapport",
+              "à la ponte qu'il coûte (60 s par OV). 100 % = égal."]
     return "\n".join(lines + ["```"])
