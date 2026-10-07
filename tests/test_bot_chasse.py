@@ -367,3 +367,13 @@ def test_armes_bot_garde_ses_autres_evenements():
     assert names == ["niveau-armes"]                                       # un seul arbre, une seule commande
     assert bot.client.on_message.__module__ == "bot" and bot.client.on_ready.__module__ == "bot"
     assert not hasattr(bot, "niveau")                                      # ancien /niveau retiré
+
+
+def test_armes_memes_attaques_que_le_moteur_de_chasse():
+    """Une stat d'unité doit être la même dans toutes les commandes du bot."""
+    import hunt_mc
+    names = {"jsn": "JSN", "sn": "SN", "ne": "NE", "js": "JS", "s": "S", "c": "C", "ce": "CE", "a": "A", "ae": "AE",
+             "se": "SE", "tk": "Tk", "tke": "TkE", "tu": "Tu", "tue": "TuE"}
+    assert set(names) == set(hunt_mc.UNITS)
+    for key, abbr in names.items():
+        assert na.DATA.unit(abbr).attack == hunt_mc.UNITS[key][1], abbr
