@@ -5,9 +5,10 @@ import logging
 import os
 
 import discord
+from discord import app_commands
 from dotenv import load_dotenv
 
-import niveau
+import niveau_armes
 import risque
 
 load_dotenv()
@@ -16,26 +17,26 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 intents = discord.Intents.default()
 intents.message_content = True                                 # à activer aussi sur le portail Discord
 client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
+armes_emojis = niveau_armes.setup(client, tree)                # /niveau-armes
 CHANNEL_IDS = {int(c) for c in os.getenv("CHANNEL_ID", "").replace(" ", "").split(",") if c}   # « id1,id2 » : un salon par serveur
 SILENT_CHANNEL_IDS = {1556337362211053741}                     # réponses sans notification
+
+
+async def setup_hook():
+    await tree.sync()                                          # toutes les commandes sont déjà dans l'arbre
+client.setup_hook = setup_hook
 
 
 @client.event
 async def on_ready():
     logging.info("Connecté en tant que %s, salons %s", client.user, sorted(CHANNEL_IDS))
+    await armes_emojis.ensure()
 
 
 @client.event
 async def on_message(message: discord.Message):
     if message.author.bot or message.channel.id not in CHANNEL_IDS:
-        return
-    if niveau.is_command(message.content):                     # « /niveau … » : rentabilité d'Armes, calcul instantané
-        try:
-            reply = niveau.answer(message.content)
-        except Exception:
-            logging.exception("calcul /niveau impossible pour %r", message.content)
-            reply = "❌ Erreur pendant le calcul. Vérifie le texte collé."
-        await message.reply(reply, mention_author=False, silent=message.channel.id in SILENT_CHANNEL_IDS)
         return
     async with message.channel.typing():                       # le calcul prend quelques secondes
         try:

@@ -243,52 +243,127 @@ def test_perte_pire_cas_irregulier():
     assert size == max(s for s in range(150, 260) if risque.stats(army, 4351, s, 1, 2, 5000)[2] <= 101)
 
 
-# --- /niveau : niveaux rentables d'Armes et de Bouclier ---
-import niveau  # noqa: E402
+# --- /niveau-armes : niveau d'Armes rentable (onglet « calcul manuel ») ---
+import asyncio  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
 
-ARMY_05_10 = "989 JSN + 252 SN + 2 NE + 240 JS + 3 S"
+import niveau_armes as na  # noqa: E402
 
-
-def test_niveau_commande_reconnue():
-    assert niveau.is_command("/niveau 100 JSN, Armes 1")
-    assert niveau.is_command("Niveau 100 JSN")
-    assert not niveau.is_command("100 JSN, Armes 1, TDC 500")
+ARMY_REF = "600 Jeunes Soldates Naines, 236 Soldates Naines, 20 Naines d’Elites, 700 Jeunes Soldates, 43 Soldates."
 
 
-def test_niveau_ratio_armes_3_en_js():
-    """Armée du 05/10 (FDF 6 686) : Armes 3 = +669 contre 320 OV × 60 s de ponte de JS à Armes 2."""
-    army, *_ = risque.parse(ARMY_05_10, need_tdc=False)
-    assert niveau.base_fdf(army) == 6686
-    rate = niveau.per_second(niveau.base_fdf, {"js": 1})
-    assert niveau.ratio(668.6, rate, 3) == pytest.approx(668.6 / (320 * 60 * 10 / 740 * 1.2))
+def test_armes_exemple_de_reference():
+    assert na.analyse_armes(ARMY_REF, "Jeunes Soldates") == {
+        "fdf_hb": 10765, "niveau_max": 4, "niveau_suivant": 5, "cible_hb": 14530, "unite_produite": "Jeune Soldate"}
 
 
-def test_niveau_max_rentable_par_unite():
-    army, *_ = risque.parse(ARMY_05_10, need_tdc=False)
-    rows = {name: (lvl, nxt) for name, lvl, nxt in niveau.armes_rows(army)}
-    assert rows["JS"][0] == 3 and 0.95 < rows["JS"][1] < 1         # Armes 4 tout juste pas rentable en JS
-    assert rows["Armée"][0] == 4                                   # mélange de l'armée : moins de FDF par heure
-    assert rows["Tk"][0] < rows["JS"][0] < rows["JSN"][0]          # plus l'unité frappe vite, moins Armes vaut
-    for lvl, nxt in rows.values():
-        assert nxt < 1
+@pytest.mark.parametrize("produced, level, nxt, target", [
+    ("Jeunes Soldates Naines", 5, 6, 23040),
+    ("Jeunes Soldates", 4, 5, 14530),
+    ("Tanks", 3, 4, 14762),
+    ("Tueuses d’élite", 4, 5, 21583),
+])
+def test_armes_quatre_productions_du_menu(produced, level, nxt, target):
+    r = na.analyse_armes(ARMY_REF, produced)
+    assert (r["fdf_hb"], r["niveau_max"], r["niveau_suivant"], r["cible_hb"]) == (10765, level, nxt, target)
 
 
-def test_niveau_vie_arrondie_comme_toolzzz():
-    assert [niveau.life("jsn", b) for b in range(6)] == [8, 9, 10, 10, 11, 12]
-    assert niveau.life("ne", 5) == 13 + 7                          # 6,5 arrondi vers le haut
+def test_armes_tableau_de_controle_des_seuils():
+    table = {"Jeune Soldate Naine": [480, 1056, 2304, 4992, 10752, 23040],
+             "Jeune Soldate": [649, 1428, 3114, 6746, 14530, 31136],
+             "Tank": [1420, 3123, 6813, 14762, 31794, 68130],
+             "Tueuse d’élite": [964, 2120, 4625, 10021, 21583, 46249]}
+    for name, targets in table.items():
+        unit = na.DATA.unit(name)
+        assert [na.threshold(na.DATA, unit, n, c) for n, c in na.DATA.costs[:6]] == targets
+    assert na.DATA.costs[-1] == (50, 45035996273704960)
 
 
-def test_niveau_bouclier_compare_a_la_jsn():
-    army = {"jsn": 1000}
-    # Bouclier 1 : +1 000 PV contre 80 OV × 60 s / 300 s = 16 JSN de 8 PV
-    assert niveau.bouclier_ratio(army, 0, 1) == pytest.approx(1000 / (16 * 8))
-    assert niveau.bouclier_ratio(army, 2, 3) == 0                  # JSN : 10 PV au Bouclier 2 et 3
-    lvl, nxt = niveau.bouclier_level(army)
-    assert nxt < 1 and any(niveau.bouclier_ratio(army, lvl - j, lvl) >= 1 for j in (1, 2, 3))
+def test_armes_egalite_au_seuil_et_juste_en_dessous():
+    assert na.analyse_armes("674 JS + 2 JSN", "JS")["niveau_max"] == 4      # 6 746 HB = S(4) en JS : rentable
+    assert na.analyse_armes("674 JS + 1 SN", "JS")["niveau_max"] == 3       # 6 745 HB : un de moins
+    assert na.analyse_armes("160 JSN", "JSN")["niveau_max"] == 1            # 480 HB = S(1) en JSN
+    assert na.analyse_armes("159 JSN + 1 OV", "JSN") == {
+        "fdf_hb": 477, "niveau_max": 0, "niveau_suivant": 1, "cible_hb": 480, "unite_produite": "Jeune Soldate Naine"}
 
 
-def test_niveau_reponse_discord():
-    out = niveau.answer("/niveau " + ARMY_05_10 + ", Armes 2")
-    assert out.startswith("```") and out.endswith("```")
-    assert "(tu es à 2)" in out and " JS          | Armes 3" in out and "Bouclier " in out
-    assert niveau.answer("/niveau Armes 2").startswith("❌ Aucune unité")
+def test_armes_tous_niveaux_rentables():
+    r = na.analyse_armes("10" + "0" * 20 + " Tk", "JSN")
+    assert r["niveau_max"] == 50 and r["niveau_suivant"] is None and r["cible_hb"] is None
+
+
+def test_armes_singulier_pluriel_abreviations_et_espaces():
+    army = na.parse_army("1 Jeune Soldate Naine; 2 000 jeunes soldates naines\n3 000 JSN + 1 Tank d'élite, 2 TKE")
+    assert army == {"Jeune Soldate Naine": 5001, "Tank d’élite": 3}
+    assert na.parse_army("1 JS, 1 JSN, 1 S, 1 SE, 1 Tu, 1 TuE") == {
+        "Jeune Soldate": 1, "Jeune Soldate Naine": 1, "Soldate": 1, "Soldate d’élite": 1, "Tueuse": 1, "Tueuse d’élite": 1}
+    assert na.DATA.unit("Tueuse d'élite").name == "Tueuse d’élite"
+    assert na.DATA.unit("TANKS").name == "Tank"
+
+
+@pytest.mark.parametrize("text", ["600 JSN, 12 Fourmis volantes", "600 JSN, beaucoup de SN", "", "0 JSN",
+                                  "-5 JSN", "5.5 JSN", "5,5 JSN"])
+def test_armes_saisies_rejetees(text):
+    with pytest.raises(na.ArmesError):
+        na.parse_army(text)
+
+
+def test_armes_ouvriere_refusee_comme_production():
+    with pytest.raises(na.ArmesError):
+        na.analyse_armes("600 JSN", "Ouvrière")
+
+
+def _interaction(user_id):
+    sent = []
+    response = SimpleNamespace(send_message=lambda *a, **k: _record(sent, a, k))
+    return SimpleNamespace(user=SimpleNamespace(id=user_id), response=response), sent
+
+
+async def _record(sent, args, kwargs):
+    sent.append((args, kwargs))
+
+
+class _Message:
+    def __init__(self):
+        self.edits = []
+
+    async def edit(self, **kwargs):
+        self.edits.append(kwargs)
+
+
+def test_armes_sessions_par_joueur_et_expiration():
+    async def scenario():
+        sessions = na.Sessions()
+        army = na.parse_army(ARMY_REF)
+        a1, b = na.UnitView(1, army, sessions, {}), na.UnitView(2, army, sessions, {})
+        a1.message, b.message = _Message(), _Message()
+        await sessions.replace(1, a1)
+        await sessions.replace(2, b)
+        # un autre joueur ne peut pas utiliser la question
+        inter, sent = _interaction(2)
+        assert not await a1.interaction_check(inter) and sent and sent[0][1]["ephemeral"]
+        # une nouvelle armée du joueur 1 clôt son ancienne question, pas celle du joueur 2
+        a2 = na.UnitView(1, army, sessions, {})
+        await sessions.replace(1, a2)
+        assert a1.finished and a1.message.edits[-1]["view"] is None
+        assert not b.finished and sessions.pending == {1: a2, 2: b}
+        # expiration après 5 min, même si la View n'a pas encore déclenché son timeout
+        a2.expires = 0
+        inter, sent = _interaction(1)
+        await a2.finish(inter, "JS")
+        assert "expirée" in sent[0][0][0]
+        await b.on_timeout()
+        assert b.finished and "expirée" in b.message.edits[-1]["content"] and 2 not in sessions.pending
+
+    assert na.TIMEOUT == 300
+    asyncio.run(scenario())
+
+
+def test_armes_bot_garde_ses_autres_evenements():
+    import os
+    os.environ.setdefault("CHANNEL_ID", "1")
+    import bot
+    names = [c.name for c in bot.tree.get_commands()]
+    assert names == ["niveau-armes"]                                       # un seul arbre, une seule commande
+    assert bot.client.on_message.__module__ == "bot" and bot.client.on_ready.__module__ == "bot"
+    assert not hasattr(bot, "niveau")                                      # ancien /niveau retiré
