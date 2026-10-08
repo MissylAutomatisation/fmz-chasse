@@ -11,3 +11,5 @@
 .env
 __pycache__/
 *.bak
+!/pyproject.toml
+!/uv.lock
