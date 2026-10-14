@@ -473,6 +473,15 @@ def test_profil_colonnes_retrouvees_par_titre():
     assert sheet.ws.rows[2][0] == "8" and sheet.ws.rows[2][2] == "Autre" and sheet.ws.rows[2][5] == "4"
 
 
+def test_profil_valeur_en_baisse_remplace_l_ancienne():
+    """Ouvrières perdues ou bâtiment rasé : la dernière valeur donnée gagne, même plus basse."""
+    sheet = profil.ProfilSheet.__new__(profil.ProfilSheet)
+    sheet.ws = FakeWorksheet()
+    sheet.save(1, "A", {"ov": 63981, "champi": 12})
+    sheet.save(1, "A", {"ov": 40000, "champi": 0})
+    assert sheet.ws.rows[1][3:5] == ["40000", "0"]
+
+
 def test_profil_colonne_manquante_ajoutee_au_bout():
     sheet = profil.ProfilSheet.__new__(profil.ProfilSheet)
     sheet.ws = FakeWorksheet()
