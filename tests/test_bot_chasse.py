@@ -262,8 +262,9 @@ def test_armes_exemple_de_reference():
     ("Jeunes Soldates", 4, 5, 14530),
     ("Tanks", 3, 4, 14762),
     ("Tueuses d’élite", 4, 5, 21583),
+    ("Artilleuses", 4, 5, 22400),
 ])
-def test_armes_quatre_productions_du_menu(produced, level, nxt, target):
+def test_armes_productions_du_menu(produced, level, nxt, target):
     r = na.analyse_armes(ARMY_REF, produced)
     assert (r["fdf_hb"], r["niveau_max"], r["niveau_suivant"], r["cible_hb"]) == (10765, level, nxt, target)
 
@@ -272,11 +273,18 @@ def test_armes_tableau_de_controle_des_seuils():
     table = {"Jeune Soldate Naine": [480, 1056, 2304, 4992, 10752, 23040],
              "Jeune Soldate": [649, 1428, 3114, 6746, 14530, 31136],
              "Tank": [1420, 3123, 6813, 14762, 31794, 68130],
-             "Tueuse d’élite": [964, 2120, 4625, 10021, 21583, 46249]}
+             "Tueuse d’élite": [964, 2120, 4625, 10021, 21583, 46249],
+             "Artilleuse": [1000, 2200, 4800, 10400, 22400, 48000]}
     for name, targets in table.items():
         unit = na.DATA.unit(name)
         assert [na.threshold(na.DATA, unit, n, c) for n, c in na.DATA.costs[:6]] == targets
     assert na.DATA.costs[-1] == (50, 45035996273704960)
+
+
+def test_armes_menu_contient_les_artilleuses():
+    view = na.UnitView(1, {"Jeune Soldate": 1}, na.Sessions(), {})
+    select = next(i for i in view.children if isinstance(i, na.UnitSelect))
+    assert "Artilleuse" in [o.value for o in select.options]
 
 
 def test_armes_egalite_au_seuil_et_juste_en_dessous():

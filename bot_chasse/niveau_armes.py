@@ -47,12 +47,14 @@ DEFAULT_DATA = {
     ]
 }
 
-# Menu limité à 4 unités pondues ; l'armée accepte toutes les unités. (libellé, nom de l'emoji, emoji de secours)
+# Unités pondues proposées dans le menu ; l'armée accepte toutes les unités. (libellé, nom de l'emoji, emoji de secours)
+# Sans image dans EMOJI_PNG, le menu affiche l'emoji de secours.
 CHOICES = (
     ("Jeunes Soldates Naines", "armes_jsn_gnome", "🧙‍♂️"),
     ("Jeunes Soldates", "armes_js_casque", "🪖"),
     ("Tanks", "armes_tank", "🛡️"),
     ("Tueuses d’élite", "armes_tueuse_boss", "👹"),
+    ("Artilleuses", "armes_artilleuse", "💣"),
 )
 TIMEOUT = 300                                                       # une question expire après 5 min
 
@@ -213,6 +215,8 @@ class WeaponsEmojis:
             try:
                 existing = {e.name: e for e in await self.client.fetch_application_emojis()}
                 for _, name, _ in CHOICES:
+                    if name not in EMOJI_PNG:
+                        continue
                     emoji = existing.get(name)
                     if emoji is None:
                         emoji = await self.client.create_application_emoji(

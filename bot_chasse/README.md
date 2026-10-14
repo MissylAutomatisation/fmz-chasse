@@ -14,7 +14,7 @@ Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates
 
 `/niveau-armes` (commande slash, réponse visible de toi seul) : niveau d'Armes rentable.
 1. Un formulaire s'ouvre : colle ton armée (`600 Jeunes Soldates Naines, 236 SN, 700 JS`). Toutes les unités sont acceptées, noms complets (singulier ou pluriel) ou abréviations, séparées par des virgules, `;`, `+` ou des lignes. Une unité inconnue est refusée (sinon la FdF serait trop basse).
-2. Choisis l'unité que tu ponds dans le menu (JSN, JS, Tanks, Tueuses d'élite), ou clique « Saisir le nom de l'unité » pour une autre.
+2. Choisis l'unité que tu ponds dans le menu (JSN, JS, Tanks, Tueuses d'élite, Artilleuses), ou clique « Saisir le nom de l'unité » pour une autre.
 3. Le bot affiche la FdF hors bonus (HB), le niveau max rentable et la FdF HB qu'il faut pour le niveau suivant.
 
 Modèle (onglet « calcul manuel » du classeur BDD, valeurs intégrées dans `niveau_armes.py`) : passer à Armes n coûte C(n) = 80 × 2^(n−1) ouvrières de 60 s. Le niveau est rentable si 10 % de la FdF HB ≥ la FdF des unités pondues pendant ce temps à Armes n−1, soit HB ≥ S(n) = plafond(C(n) × 60 / ponte × attaque × (n + 9)). Ponte continue : seul S(n) est arrondi. Une question expire après 5 minutes ; relancer la commande remplace l'ancienne.
