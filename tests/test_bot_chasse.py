@@ -385,3 +385,53 @@ def test_armes_memes_attaques_que_le_moteur_de_chasse():
     assert set(names) == set(hunt_mc.UNITS)
     for key, abbr in names.items():
         assert na.DATA.unit(abbr).attack == hunt_mc.UNITS[key][1], abbr
+
+
+# --- Salon profil (ov, Champignonnière, Étable à pucerons) ---
+import profil  # noqa: E402
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("ov 1234567 champi 12 puceron 8", {"ov": 1234567, "champi": 12, "puceron": 8}),
+    ("Ouvrières : 1 234 567, Champignonnière 12, étable à pucerons 8", {"ov": 1234567, "champi": 12, "puceron": 8}),
+    ("ouvriere 1.234.567 champignons niv 9 pucerons lvl 7", {"ov": 1234567, "champi": 9, "puceron": 7}),
+    ("OVS 500000 etable 4", {"ov": 500000, "puceron": 4}),
+    ("12 champi 8 puceron", {"champi": 12, "puceron": 8}),
+    ("champi 13", {"champi": 13}),
+    ("ov 1234567 champi", {"ov": 1234567}),
+])
+def test_profil_lecture(text, expected):
+    assert profil.parse(text) == expected
+
+
+def test_profil_message_incompris():
+    with pytest.raises(profil.ProfilError):
+        profil.parse("bonjour")
+
+
+class FakeWorksheet:
+    def __init__(self):
+        self.rows = [[]]
+
+    def get_all_values(self):
+        return [list(r) for r in self.rows]
+
+    def update(self, range_name, values, value_input_option=None):
+        i = int(range_name[1:]) - 1
+        self.rows += [[] for _ in range(i + 1 - len(self.rows))]
+        self.rows[i] = [str(v) for v in values[0]]
+
+    def append_row(self, row, value_input_option=None):
+        self.rows.append([str(v) for v in row])
+
+
+def test_profil_une_ligne_par_joueur_mise_a_jour_partielle():
+    sheet = profil.ProfilSheet.__new__(profil.ProfilSheet)
+    sheet.ws = FakeWorksheet()
+    sheet.save(1, "A", {"ov": 1000, "champi": 5, "puceron": 3})
+    sheet.save(2, "B", {"ov": 2000})
+    sheet.save(1, "A2", {"champi": 6})
+    rows = sheet.ws.rows
+    assert rows[0] == profil.HEADER and len(rows) == 3
+    assert rows[1][:5] == ["A2", "1", "1000", "6", "3"]
+    assert rows[2][:5] == ["B", "2", "2000", "", ""]

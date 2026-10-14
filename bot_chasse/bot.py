@@ -9,6 +9,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 
 import niveau_armes
+import profil
 import risque
 
 load_dotenv()
@@ -21,6 +22,12 @@ tree = app_commands.CommandTree(client)
 armes_emojis = niveau_armes.setup(client, tree)                # /niveau-armes
 CHANNEL_IDS = {int(c) for c in os.getenv("CHANNEL_ID", "").replace(" ", "").split(",") if c}   # « id1,id2 » : un salon par serveur
 SILENT_CHANNEL_IDS = {1556337362211053741}                     # réponses sans notification
+PROFIL_CHANNEL_ID = 1560005265061974087                        # ov, Champignonnière, Étable -> Google Sheet
+try:
+    profil_sheet = profil.from_env()
+except Exception:
+    logging.exception("Google Sheet des profils inaccessible : salon profil désactivé")
+    profil_sheet = None
 
 
 async def setup_hook():
@@ -36,7 +43,12 @@ async def on_ready():
 
 @client.event
 async def on_message(message: discord.Message):
-    if message.author.bot or message.channel.id not in CHANNEL_IDS:
+    if message.author.bot:
+        return
+    if message.channel.id == PROFIL_CHANNEL_ID:
+        await on_profil(message)
+        return
+    if message.channel.id not in CHANNEL_IDS:
         return
     async with message.channel.typing():                       # le calcul prend quelques secondes
         try:
@@ -54,6 +66,25 @@ async def on_message(message: discord.Message):
         logging.exception("prochaines chasses impossibles pour %r", message.content)
         full = reply.replace(risque.WAIT_PLAN, "📅 Prochaines chasses : calcul impossible.")
     await sent.edit(content=full)
+
+
+async def on_profil(message: discord.Message):
+    try:
+        values = profil.parse(message.content)
+    except profil.ProfilError as e:
+        await message.reply(str(e), mention_author=False, silent=True)
+        return
+    if profil_sheet is None:
+        await message.reply("❌ Le Google Sheet n'est pas configuré. Préviens un admin.", mention_author=False, silent=True)
+        return
+    try:
+        await asyncio.to_thread(profil_sheet.save, message.author.id, message.author.display_name, values)
+    except Exception:
+        logging.exception("écriture du profil impossible pour %r", message.content)
+        await message.reply("❌ Pas enregistré (Google Sheet injoignable). Réessaie plus tard.", mention_author=False,
+                            silent=True)
+        return
+    await message.reply(f"✅ Enregistré : {profil.summary(values)}", mention_author=False, silent=True)
 
 
 if __name__ == "__main__":

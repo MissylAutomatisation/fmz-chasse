@@ -19,9 +19,17 @@ Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates
 
 Modèle (onglet « calcul manuel » du classeur BDD, valeurs intégrées dans `niveau_armes.py`) : passer à Armes n coûte C(n) = 80 × 2^(n−1) ouvrières de 60 s. Le niveau est rentable si 10 % de la FdF HB ≥ la FdF des unités pondues pendant ce temps à Armes n−1, soit HB ≥ S(n) = plafond(C(n) × 60 / ponte × attaque × (n + 9)). Ponte continue : seul S(n) est arrondi. Une question expire après 5 minutes ; relancer la commande remplace l'ancienne.
 
+## Salon profil (ov, Champignonnière, Étable à pucerons)
+Dans le salon `1560005265061974087`, chaque joueur écrit par exemple `ov 1 234 567 champi 12 puceron 8`. Le bot met à jour **sa** ligne dans le Google Sheet (une ligne par compte Discord : Joueur, ID Discord, Ouvrières, Champignonnière, Étable à pucerons, Mis à jour) et répond « ✅ Enregistré » sans notification.
+- Écritures acceptées : ov, ovs, ouv, ouvrière(s), ouvrier(s) ; champ, champi(s), champignon(s), champignonnière ; puc, puceron(s), étable(s), étable à pucerons. Majuscules et accents indifférents. `:`, `=`, `niv`, `lvl` acceptés entre le mot et le nombre.
+- Nombres : `1234567`, `1 234 567`, `1.234.567`. Le nombre peut aussi être avant le mot si le message commence par un nombre (`12 champi 8 puceron`).
+- On peut n'en donner qu'une partie (`champi 13`) : les autres valeurs restent.
+- `.env` : `GSHEET_KEY=chemin/vers/cle.json` (compte de service, **Éditeur** sur le sheet) et `PROFIL_SHEET_ID=…`. Sans eux, le salon répond que le sheet n'est pas configuré ; le reste du bot tourne.
+
 ## Fichiers
 - `risque.py` : lecture du texte et calcul (moteur `hunt_mc.py`, copié depuis `tools/`). Essai : `python risque.py "948 JSN, Armes 2, Bouclier 2, TDC 2 148"`.
 - `niveau_armes.py` : commande `/niveau-armes` (calcul + formulaire, menu, 4 emojis intégrés).
+- `profil.py` : salon profil (lecture du message + écriture dans le Google Sheet).
 - `bot.py` : le bot (lit les salons de `CHANNEL_ID`, séparés par des virgules : un salon par serveur Discord). Dans les salons de `SILENT_CHANNEL_IDS`, il répond sans notification.
 - `.env` (sur le Pi seulement, secret) : `DISCORD_TOKEN=…` et `CHANNEL_ID=…`.
 - `bot-chasse.service` : service systemd (redémarre tout seul).
@@ -34,7 +42,7 @@ Modèle (onglet « calcul manuel » du classeur BDD, valeurs intégrées dans `n
 ## Mettre à jour
 Depuis le PC, dans `bot_chasse/` :
 ```
-scp bot.py risque.py niveau_armes.py ../tools/hunt_mc.py raspberrypi:MyProjects/bot_chasse/
+scp bot.py risque.py niveau_armes.py profil.py ../tools/hunt_mc.py raspberrypi:MyProjects/bot_chasse/
 ssh raspberrypi sudo systemctl restart bot-chasse
 ```
 
