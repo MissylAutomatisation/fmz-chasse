@@ -22,7 +22,7 @@ tree = app_commands.CommandTree(client)
 armes_emojis = niveau_armes.setup(client, tree)                # /niveau-armes
 CHANNEL_IDS = {int(c) for c in os.getenv("CHANNEL_ID", "").replace(" ", "").split(",") if c}   # « id1,id2 » : un salon par serveur
 SILENT_CHANNEL_IDS = {1556337362211053741}                     # réponses sans notification
-PROFIL_CHANNEL_ID = 1560005265061974087                        # ov, Champignonnière, Étable -> Google Sheet
+PROFIL_CHANNEL_IDS = {1559888062430052474}                        # pseudo, ov, Champignonnière, Étable -> Google Sheet
 try:
     profil_sheet = profil.from_env()
 except Exception:
@@ -45,7 +45,7 @@ async def on_ready():
 async def on_message(message: discord.Message):
     if message.author.bot:
         return
-    if message.channel.id == PROFIL_CHANNEL_ID:
+    if message.channel.id in PROFIL_CHANNEL_IDS:
         await on_profil(message)
         return
     if message.channel.id not in CHANNEL_IDS:
