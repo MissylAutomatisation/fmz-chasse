@@ -405,6 +405,10 @@ import profil  # noqa: E402
     ("ov 500000 IG : Grim_Le-Fourbe champi 3", {"pseudo": "Grim_Le-Fourbe", "ov": 500000, "champi": 3}),
     ("id in game ovni42", {"pseudo": "ovni42"}),
     ("Pseudo: Élodie", {"pseudo": "Élodie"}),
+    ("DogGyneco ov 63981 champi 12 puceron 0", {"pseudo": "DogGyneco", "ov": 63981, "champi": 12, "puceron": 0}),
+    ("Grim_42 : champi 5", {"pseudo": "Grim_42", "champi": 5}),
+    ("Ouvrières 5000 champi 3", {"ov": 5000, "champi": 3}),
+    ("Étable à pucerons 8", {"puceron": 8}),
 ])
 def test_profil_lecture(text, expected):
     assert profil.parse(text) == expected
@@ -413,6 +417,8 @@ def test_profil_lecture(text, expected):
 def test_profil_message_incompris():
     with pytest.raises(profil.ProfilError):
         profil.parse("bonjour")
+    with pytest.raises(profil.ProfilError):
+        profil.parse("DogGyneco")                              # un mot seul n'est pas un profil
 
 
 class FakeWorksheet:

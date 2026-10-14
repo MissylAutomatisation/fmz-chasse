@@ -15,6 +15,7 @@ HEADER = [NOM_DISCORD, LABELS["pseudo"], ID_DISCORD, LABELS["ov"], LABELS["champ
 # Pseudo en jeu : un mot (lettres, chiffres, _ - .), casse gardée ; lu avant les nombres puis retiré du texte.
 PSEUDO = re.compile(r"\b(?:pseudo|id\s*(?:in\s*game|ig|jeu)|in\s*game|ingame|ig)\b\s*[:=]?\s*(?P<pseudo>[\w.\-]+)",
                     re.IGNORECASE)
+BARE_PSEUDO = re.compile(r"\s*(?P<pseudo>[\w.\-]+)\s*[:,;]?\s+")
 
 # Mots-clés après normalisation (minuscules, sans accents) ; « étable à pucerons » est ramené à « puceron » avant.
 KEYWORD = r"(?P<kw>ouvri\w*|ouv|ovs?|champi\w*|champ|puc\w*|etables?)"
@@ -55,6 +56,23 @@ def parse(text: str) -> dict[str, int | str]:
     if m:
         found["pseudo"] = m["pseudo"]
         text = text[:m.start()] + " " + text[m.end():]        # un pseudo comme « ovni42 » n'est pas lu comme un nombre
+    else:
+        # Sans mot-clé, un premier mot qui n'est ni un nombre ni un mot-clé est le pseudo (« DogGyneco ov 63981 »),
+        # à condition que la suite donne au moins une valeur : « bonjour » seul reste incompris.
+        m = BARE_PSEUDO.match(text)
+        if m and not re.fullmatch(KEYWORD, normalize(m["pseudo"])) and not m["pseudo"][0].isdigit():
+            rest = parse_numbers(text[m.end():])
+            if rest:
+                return {"pseudo": m["pseudo"], **rest}
+    found.update(parse_numbers(text))
+    if not found:
+        raise ProfilError(USAGE)
+    return found
+
+
+def parse_numbers(text: str) -> dict[str, int]:
+    """Ouvrières, Champignonnière, Étable : seuls les champs trouvés sont renvoyés."""
+    found: dict[str, int] = {}
     text = normalize(text)
     used: list[range] = []                                     # nombres déjà pris : un nombre ne sert qu'une fois
     order = (BEFORE, AFTER) if re.match(r"\d", text.strip()) else (AFTER, BEFORE)   # « 12 champi 8 puceron »
@@ -65,8 +83,6 @@ def parse(text: str) -> dict[str, int | str]:
                 continue
             found[field] = int(re.sub(r"\D", "", m["num"]))
             used.append(range(m.start("num"), m.end("num")))
-    if not found:
-        raise ProfilError(USAGE)
     return found
 
 

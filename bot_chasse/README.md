@@ -21,7 +21,7 @@ Modèle (onglet « calcul manuel » du classeur BDD, valeurs intégrées dans `n
 
 ## Salon profil (pseudo en jeu, ov, Champignonnière, Étable à pucerons)
 Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Missyl ov 1 234 567 champi 12 puceron 8`. Le bot met à jour **sa** ligne dans le Google Sheet (une ligne par compte Discord : Nom Discord, ID In Game, ID Discord, Ouvrières, Champignonnière, Étable à pucerons, Mis à jour) et répond « ✅ Enregistré » sans notification.
-- Pseudo en jeu : `pseudo X`, `ig X`, `in game X`, `id in game X`, `id ig X` (un mot : lettres, chiffres, `_`, `-`, `.` ; majuscules gardées).
+- Pseudo en jeu : `pseudo X`, `ig X`, `in game X`, `id in game X`, `id ig X` (un mot : lettres, chiffres, `_`, `-`, `.` ; majuscules gardées). Sans mot-clé, un premier mot qui n'est ni un nombre ni un mot-clé est pris comme pseudo s'il est suivi d'au moins une valeur (`DogGyneco ov 63981 champi 12`).
 - La ligne du joueur est retrouvée par son **ID Discord** (un changement de pseudo Discord ne crée pas de doublon) et chaque colonne par son **titre** : on peut déplacer des colonnes ou en ajouter à la main, le bot n'écrit que dans les siennes. Une colonne du bot absente est recréée en fin de tableau. Ne pas renommer les titres des colonnes du bot.
 - Écritures acceptées : ov, ovs, ouv, ouvrière(s), ouvrier(s) ; champ, champi(s), champignon(s), champignonnière ; puc, puceron(s), étable(s), étable à pucerons. Majuscules et accents indifférents. `:`, `=`, `niv`, `lvl` acceptés entre le mot et le nombre.
 - Nombres : `1234567`, `1 234 567`, `1.234.567`. Le nombre peut aussi être avant le mot si le message commence par un nombre (`12 champi 8 puceron`).
