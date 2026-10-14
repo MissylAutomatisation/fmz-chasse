@@ -388,6 +388,8 @@ def test_armes_memes_attaques_que_le_moteur_de_chasse():
 
 
 # --- Salon profil (ov, Champignonnière, Étable à pucerons) ---
+import re  # noqa: E402
+
 import profil  # noqa: E402
 
 
@@ -399,6 +401,10 @@ import profil  # noqa: E402
     ("12 champi 8 puceron", {"champi": 12, "puceron": 8}),
     ("champi 13", {"champi": 13}),
     ("ov 1234567 champi", {"ov": 1234567}),
+    ("pseudo Missyl ov 1234567", {"pseudo": "Missyl", "ov": 1234567}),
+    ("ov 500000 IG : Grim_Le-Fourbe champi 3", {"pseudo": "Grim_Le-Fourbe", "ov": 500000, "champi": 3}),
+    ("id in game ovni42", {"pseudo": "ovni42"}),
+    ("Pseudo: Élodie", {"pseudo": "Élodie"}),
 ])
 def test_profil_lecture(text, expected):
     assert profil.parse(text) == expected
@@ -421,8 +427,17 @@ class FakeWorksheet:
         self.rows += [[] for _ in range(i + 1 - len(self.rows))]
         self.rows[i] = [str(v) for v in values[0]]
 
-    def append_row(self, row, value_input_option=None):
+    def append_row(self, row, value_input_option=None, table_range=None):
         self.rows.append([str(v) for v in row])
+
+    def batch_update(self, data, value_input_option=None):
+        for cell in data:
+            m = re.fullmatch(r"([A-Z]+)(\d+)", cell["range"])
+            c = sum((ord(ch) - 64) * 26 ** k for k, ch in enumerate(reversed(m[1]))) - 1
+            r = int(m[2]) - 1
+            row = self.rows[r]
+            row += [""] * (c + 1 - len(row))
+            row[c] = str(cell["values"][0][0])
 
 
 def test_profil_une_ligne_par_joueur_mise_a_jour_partielle():
@@ -430,8 +445,41 @@ def test_profil_une_ligne_par_joueur_mise_a_jour_partielle():
     sheet.ws = FakeWorksheet()
     sheet.save(1, "A", {"ov": 1000, "champi": 5, "puceron": 3})
     sheet.save(2, "B", {"ov": 2000})
-    sheet.save(1, "A2", {"champi": 6})
+    sheet.save(1, "A2", {"champi": 6, "pseudo": "Missyl"})
     rows = sheet.ws.rows
     assert rows[0] == profil.HEADER and len(rows) == 3
-    assert rows[1][:5] == ["A2", "1", "1000", "6", "3"]
-    assert rows[2][:5] == ["B", "2", "2000", "", ""]
+    assert rows[1][:6] == ["A2", "Missyl", "1", "1000", "6", "3"]
+    assert rows[2][:6] == ["B", "", "2", "2000", "", ""]
+
+
+def test_profil_colonnes_retrouvees_par_titre():
+    """Colonnes déplacées et colonne ajoutée à la main : le bot retrouve les siennes et ne touche pas aux autres."""
+    sheet = profil.ProfilSheet.__new__(profil.ProfilSheet)
+    sheet.ws = FakeWorksheet()
+    sheet.ws.rows = [["ID Discord", "Notes", "Joueur", "Ouvrières", "Mis à jour", "Champignonnière",
+                      "Étable à pucerons", "ID In Game"],
+                     ["7", "chef", "Ancien", "10", "", "1", "1", ""]]
+    sheet.save(7, "Nouveau", {"ov": 99, "pseudo": "Missyl"})
+    row = sheet.ws.rows[1]
+    assert row[0] == "7" and row[1] == "chef" and row[2] == "Nouveau" and row[3] == "99"
+    assert row[5] == "1" and row[7] == "Missyl"
+    sheet.save(8, "Autre", {"champi": 4})
+    assert sheet.ws.rows[2][0] == "8" and sheet.ws.rows[2][2] == "Autre" and sheet.ws.rows[2][5] == "4"
+
+
+def test_profil_colonne_manquante_ajoutee_au_bout():
+    sheet = profil.ProfilSheet.__new__(profil.ProfilSheet)
+    sheet.ws = FakeWorksheet()
+    sheet.ws.rows = [["Joueur", "ID Discord", "Ouvrières", "Champignonnière", "Étable à pucerons", "Mis à jour"],
+                     ["A", "1", "1000", "5", "3", "01/01/2026 10:00"]]
+    sheet.save(1, "A", {"pseudo": "Missyl"})
+    assert sheet.ws.rows[0][6] == "ID In Game"
+    assert sheet.ws.rows[1][:5] == ["A", "1", "1000", "5", "3"] and sheet.ws.rows[1][6] == "Missyl"
+
+
+def test_profil_entete_colonnes():
+    assert profil.HEADER[:3] == ["Joueur", "ID In Game", "ID Discord"]
+
+
+def test_profil_resume_avec_pseudo():
+    assert profil.summary({"pseudo": "Missyl", "ov": 1234567}) == "ID In Game Missyl · Ouvrières 1 234 567"
