@@ -8,9 +8,9 @@ from zoneinfo import ZoneInfo
 
 FIELDS = ("pseudo", "ov", "champi", "puceron")
 LABELS = {"pseudo": "ID In Game", "ov": "Ouvrières", "champi": "Champignonnière", "puceron": "Étable à pucerons"}
-ID_DISCORD, DATE = "ID Discord", "Mis à jour"
+NOM_DISCORD, ID_DISCORD, DATE = "Nom Discord", "ID Discord", "Mis à jour"
 # Ordre d'un sheet neuf ; ensuite chaque colonne est retrouvée par son titre, où qu'elle soit.
-HEADER = ["Joueur", LABELS["pseudo"], ID_DISCORD, LABELS["ov"], LABELS["champi"], LABELS["puceron"], DATE]
+HEADER = [NOM_DISCORD, LABELS["pseudo"], ID_DISCORD, LABELS["ov"], LABELS["champi"], LABELS["puceron"], DATE]
 
 # Pseudo en jeu : un mot (lettres, chiffres, _ - .), casse gardée ; lu avant les nombres puis retiré du texte.
 PSEUDO = re.compile(r"\b(?:pseudo|id\s*(?:in\s*game|ig|jeu)|in\s*game|ingame|ig)\b\s*[:=]?\s*(?P<pseudo>[\w.\-]+)",
@@ -114,7 +114,7 @@ class ProfilSheet:
         index = next((i for i, row in enumerate(rows[1:], start=1)
                       if len(row) > col[ID_DISCORD] and row[col[ID_DISCORD]].strip() == uid), None)
 
-        cells = {"Joueur": name, ID_DISCORD: uid, DATE: now_paris().strftime("%d/%m/%Y %H:%M")}
+        cells = {NOM_DISCORD: name, ID_DISCORD: uid, DATE: now_paris().strftime("%d/%m/%Y %H:%M")}
         cells.update({LABELS[field]: value for field, value in values.items()})
         if index is None:
             row = [""] * (max(col.values()) + 1)

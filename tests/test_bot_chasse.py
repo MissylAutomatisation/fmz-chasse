@@ -456,7 +456,7 @@ def test_profil_colonnes_retrouvees_par_titre():
     """Colonnes déplacées et colonne ajoutée à la main : le bot retrouve les siennes et ne touche pas aux autres."""
     sheet = profil.ProfilSheet.__new__(profil.ProfilSheet)
     sheet.ws = FakeWorksheet()
-    sheet.ws.rows = [["ID Discord", "Notes", "Joueur", "Ouvrières", "Mis à jour", "Champignonnière",
+    sheet.ws.rows = [["ID Discord", "Notes", "Nom Discord", "Ouvrières", "Mis à jour", "Champignonnière",
                       "Étable à pucerons", "ID In Game"],
                      ["7", "chef", "Ancien", "10", "", "1", "1", ""]]
     sheet.save(7, "Nouveau", {"ov": 99, "pseudo": "Missyl"})
@@ -470,7 +470,7 @@ def test_profil_colonnes_retrouvees_par_titre():
 def test_profil_colonne_manquante_ajoutee_au_bout():
     sheet = profil.ProfilSheet.__new__(profil.ProfilSheet)
     sheet.ws = FakeWorksheet()
-    sheet.ws.rows = [["Joueur", "ID Discord", "Ouvrières", "Champignonnière", "Étable à pucerons", "Mis à jour"],
+    sheet.ws.rows = [["Nom Discord", "ID Discord", "Ouvrières", "Champignonnière", "Étable à pucerons", "Mis à jour"],
                      ["A", "1", "1000", "5", "3", "01/01/2026 10:00"]]
     sheet.save(1, "A", {"pseudo": "Missyl"})
     assert sheet.ws.rows[0][6] == "ID In Game"
@@ -478,7 +478,7 @@ def test_profil_colonne_manquante_ajoutee_au_bout():
 
 
 def test_profil_entete_colonnes():
-    assert profil.HEADER[:3] == ["Joueur", "ID In Game", "ID Discord"]
+    assert profil.HEADER[:3] == ["Nom Discord", "ID In Game", "ID Discord"]
 
 
 def test_profil_resume_avec_pseudo():
