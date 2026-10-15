@@ -17,7 +17,7 @@ Armée seule (sans Armes, Bouclier, TDC, perte ni réplique) : le bot calcule le
 `/niveau-armes` (commande slash, réponse visible de toi seul) : niveau d'Armes rentable.
 1. Un formulaire s'ouvre : colle ton armée (`600 Jeunes Soldates Naines, 236 SN, 700 JS`). Toutes les unités sont acceptées, noms complets (singulier ou pluriel) ou abréviations, séparées par des virgules, `;`, `+` ou des lignes. Une unité inconnue est refusée (sinon la FdF serait trop basse).
 2. Choisis l'unité que tu ponds dans le menu (JSN, JS, Artilleuses, Tanks, Tueuses d'élite), ou clique « Saisir le nom de l'unité » pour une autre.
-3. Le bot affiche en gros le niveau max rentable, puis sur une ligne : FdF hors bonus (HB), FdF HB du niveau suivant, ce qui manque, unité pondue.
+3. Le bot affiche le niveau max rentable en titre, puis en gras : FdF hors bonus (HB) actuelle, FdF HB du niveau suivant, ce qui manque ; et l'unité pondue.
 
 Modèle (onglet « calcul manuel » du classeur BDD, valeurs intégrées dans `niveau_armes.py`) : passer à Armes n coûte C(n) = 80 × 2^(n−1) ouvrières de 60 s. Le niveau est rentable si 10 % de la FdF HB ≥ la FdF des unités pondues pendant ce temps à Armes n−1, soit HB ≥ S(n) = plafond(C(n) × 60 / ponte × attaque × (n + 9)). Ponte continue : seul S(n) est arrondi. Une question expire après 5 minutes ; relancer la commande remplace l'ancienne.
 

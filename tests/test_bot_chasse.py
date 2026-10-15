@@ -292,13 +292,14 @@ def test_armes_artilleuses_juste_apres_les_js_dans_le_menu():
         "Jeunes Soldates Naines", "Jeunes Soldates", "Artilleuses", "Tanks", "Tueuses d’élite"]
 
 
-def test_armes_affichage_niveau_en_gros_et_reste_sur_une_ligne():
+def test_armes_affichage():
     embed = na.result_embed(na.parse_army(ARMY_REF), "JS")
-    level, line = embed.description.split("\n")
-    assert level == "# Armes 4"
-    assert line == "FdF HB 10 765 · Armes 5 à 14 530 HB (manque 3 765) · Ponte : Jeune Soldate"
+    assert embed.title == "Armes 4 — Niveau maximal rentable"
+    assert embed.description == ("Actuel : **10 765 HB**\nCible Armes 5 : **14 530 HB**\nManque : **3 765 HB**\n\n"
+                                 "**Production : Jeune Soldate · HB = attaque hors bonus**")
     top = na.result_embed({"Tank": 10 ** 21}, "JSN")
-    assert top.description.startswith("# Armes 50 ou plus\n")
+    assert top.title == "Armes 50 ou plus — Niveau maximal rentable"
+    assert "Tous les niveaux de la BDD sont rentables" in top.description
 
 
 ARMY_ONLY = ("8 468 Jeunes Soldates Naines, 1 322 Soldates Naines, 219 Naines d’Elites, 10 552 Jeunes Soldates, "
@@ -356,7 +357,7 @@ def test_armes_salon_question_puis_nom_de_l_unite():
         assert not await na.answer_unit_name(_ChannelMessage(2, 10, "JS"), True)
         assert not await na.answer_unit_name(_ChannelMessage(1, 10, "salut"), True)
         assert await na.answer_unit_name(_ChannelMessage(1, 10, "Jeunes Soldates"), True)
-        assert view.message.edits[-1]["embed"].description.startswith("# Armes 4\n")
+        assert view.message.edits[-1]["embed"].title.startswith("Armes 4 —")
         assert 1 not in na.SESSIONS.pending
 
     asyncio.run(scenario())

@@ -183,19 +183,18 @@ def fmt(value) -> str:
 
 
 def result_embed(army: dict[str, int], produced: str, data: WeaponsData = DATA) -> discord.Embed:
-    """Le niveau maximal en gros, le reste sur une ligne."""
+    """Le niveau maximal en titre ; HB actuelle, cible et manque en gras."""
     result = calculate(army, produced, data)
-    unit = data.unit(produced).name
+    lines = [f"Actuel : **{fmt(result.hb)} HB**"]
     if result.next_level:
-        level = f"# Armes {result.level}"
-        line = (f"FdF HB {fmt(result.hb)} · Armes {result.next_level} à {fmt(result.next_hb)} HB "
-                f"(manque {fmt(result.next_hb - result.hb)}) · Ponte : {unit}")
+        title = f"Armes {result.level} — Niveau maximal rentable"
+        lines += [f"Cible Armes {result.next_level} : **{fmt(result.next_hb)} HB**",
+                  f"Manque : **{fmt(result.next_hb - result.hb)} HB**"]
     else:
-        level = f"# Armes {result.level} ou plus"
-        line = f"FdF HB {fmt(result.hb)} · tous les niveaux de la BDD sont rentables · Ponte : {unit}"
-    embed = discord.Embed(title="Niveau maximal rentable", description=f"{level}\n{line}", color=discord.Color.green())
-    embed.set_footer(text="HB = hors bonus · ponte continue")
-    return embed
+        title = f"Armes {result.level} ou plus — Niveau maximal rentable"
+        lines.append("Tous les niveaux de la BDD sont rentables")
+    lines += ["", f"**Production : {data.unit(produced).name} · HB = attaque hors bonus**"]
+    return discord.Embed(title=title, description="\n".join(lines), color=discord.Color.green())
 
 
 class WeaponsEmojis:
