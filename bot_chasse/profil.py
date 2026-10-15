@@ -142,9 +142,74 @@ class ProfilSheet:
                                   for label, value in cells.items()], value_input_option="RAW")
 
 
+    def fiches(self) -> list[dict]:
+        """Lignes du sheet en dictionnaires {titre de colonne: valeur}."""
+        rows = self.ws.get_all_values()
+        if not rows:
+            return []
+        header = [h.strip() for h in rows[0]]
+        return [dict(zip(header, row)) for row in rows[1:]]
+
+    def export(self, alliance: str) -> tuple[str, bool]:
+        """(CSV, player_id trouvés). Si l'API est injoignable, l'export part du sheet seul, sans player_id."""
+        try:
+            joueurs, ok = joueurs_api(), True
+        except Exception:
+            joueurs, ok = [], False
+        return texte_csv(lignes_export(self.fiches(), joueurs, alliance)), ok
+
+
 def from_env() -> ProfilSheet | None:
     """None si le salon ou le sheet n'est pas configuré : le reste du bot tourne quand même."""
     key_file, sheet_id = os.getenv("GSHEET_KEY"), os.getenv("PROFIL_SHEET_ID")
     if not (key_file and sheet_id):
         return None
     return ProfilSheet(key_file, sheet_id)
+
+
+# --- Export CSV (/niveau-joueur) ---
+EXPORT_HEADER = ["player_id", "pseudo", "etable_puceron", "champi", "ouvriere"]
+API_JOUEURS = "https://s5.fourmizzz.fr/api/exports/players/"
+
+
+def entier(valeur) -> int:
+    """« 1 234 567 », « 12 », vide -> entier (0 si vide)."""
+    chiffres = re.sub(r"\D", "", str(valeur or ""))
+    return int(chiffres) if chiffres else 0
+
+
+def lignes_export(fiches: list[dict], joueurs: list[dict], alliance: str) -> list[list]:
+    """Membres de l'alliance (export API) complétés par les fiches du sheet, pseudo comparé sans la casse.
+
+    Un membre sans fiche a 0 partout ; une fiche dont le pseudo n'est pas dans l'API garde un player_id vide.
+    Triées par pseudo."""
+    par_pseudo = {j["pseudo"].lower(): j for j in joueurs}
+    lignes = {j["pseudo"].lower(): [j["id"], j["pseudo"], 0, 0, 0] for j in joueurs if j["alliance"] == alliance}
+    for fiche in fiches:
+        pseudo = str(fiche.get(LABELS["pseudo"], "")).strip()
+        if not pseudo:
+            continue
+        joueur = par_pseudo.get(pseudo.lower())
+        ligne = lignes.setdefault(pseudo.lower(), [joueur["id"] if joueur else "", joueur["pseudo"] if joueur else pseudo,
+                                                   0, 0, 0])
+        ligne[2:] = [entier(fiche.get(LABELS["puceron"])), entier(fiche.get(LABELS["champi"])),
+                     entier(fiche.get(LABELS["ov"]))]
+    return sorted(lignes.values(), key=lambda ligne: str(ligne[1]).lower())
+
+
+def texte_csv(lignes: list[list]) -> str:
+    import csv
+    import io
+    sortie = io.StringIO()
+    ecrivain = csv.writer(sortie, lineterminator="\n")
+    ecrivain.writerow(EXPORT_HEADER)
+    ecrivain.writerows(lignes)
+    return sortie.getvalue()
+
+
+def joueurs_api() -> list[dict]:
+    import json
+    import urllib.request
+    requete = urllib.request.Request(API_JOUEURS, headers={"User-Agent": "Fmz-Chasse (bot d'alliance)"})
+    with urllib.request.urlopen(requete, timeout=30) as reponse:
+        return json.load(reponse)

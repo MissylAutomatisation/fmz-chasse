@@ -372,7 +372,7 @@ def test_armes_bot_garde_ses_autres_evenements():
     os.environ.setdefault("CHANNEL_ID", "1")
     import bot
     names = [c.name for c in bot.tree.get_commands()]
-    assert names == ["niveau-armes"]                                       # un seul arbre, une seule commande
+    assert sorted(names) == ["niveau-armes", "niveau-joueur"]              # un seul arbre pour toutes les commandes
     assert bot.client.on_message.__module__ == "bot" and bot.client.on_ready.__module__ == "bot"
     assert not hasattr(bot, "niveau")                                      # ancien /niveau retiré
 
@@ -498,3 +498,33 @@ def test_profil_entete_colonnes():
 
 def test_profil_resume_avec_pseudo():
     assert profil.summary({"pseudo": "Missyl", "ov": 1234567}) == "ID In Game Missyl · Ouvrières 1 234 567"
+
+
+# --- Export CSV du sheet Data OUAF (/niveau-joueur) ---
+def test_export_niveau_joueur():
+    joueurs = [{"id": 426, "pseudo": "Sirius", "alliance": "OUAF"},
+               {"id": 412, "pseudo": "Krokmou", "alliance": "OUAF"},
+               {"id": 434, "pseudo": "Bull", "alliance": "OUAF"},
+               {"id": 7, "pseudo": "Autre", "alliance": "LCN"}]
+    fiches = [{"ID In Game": "Sirius", "Ouvrières": "100\u202f191", "Champignonnière": "16", "Étable à pucerons": "4"},
+              {"ID In Game": "krokmou", "Ouvrières": "55 000", "Champignonnière": "12", "Étable à pucerons": ""},
+              {"ID In Game": "Inconnu", "Ouvrières": "", "Champignonnière": "3", "Étable à pucerons": "1"},
+              {"ID In Game": "", "Ouvrières": "9"}]
+    lignes = profil.lignes_export(fiches, joueurs, "OUAF")
+    assert lignes == [[434, "Bull", 0, 0, 0], ["", "Inconnu", 1, 3, 0],
+                      [412, "Krokmou", 0, 12, 55000], [426, "Sirius", 4, 16, 100191]]
+    assert profil.texte_csv(lignes).splitlines()[:2] == ["player_id,pseudo,etable_puceron,champi,ouvriere",
+                                                          "434,Bull,0,0,0"]
+
+
+def test_export_sans_api():
+    sheet = profil.ProfilSheet.__new__(profil.ProfilSheet)
+    sheet.ws = SimpleNamespace(get_all_values=lambda: [["Nom Discord", "ID In Game", "Champignonnière"],
+                                                        ["x", "Sirius", "16"]])
+    ancien = profil.joueurs_api
+    profil.joueurs_api = lambda: (_ for _ in ()).throw(OSError("hors ligne"))
+    try:
+        texte, ok = sheet.export("OUAF")
+    finally:
+        profil.joueurs_api = ancien
+    assert not ok and texte.splitlines()[1] == ",Sirius,0,16,0"

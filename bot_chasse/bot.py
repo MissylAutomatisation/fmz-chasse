@@ -1,6 +1,7 @@
 """Bot Discord « Chasse » : lit des salons dédiés (CHANNEL_ID=id1,id2) ; chaque message (armée, Armes, Bouclier, TDC) reçoit le tableau du
 risque selon la taille de chasse."""
 import asyncio
+import io
 import logging
 import os
 
@@ -28,6 +29,30 @@ try:
 except Exception:
     logging.exception("Google Sheet des profils inaccessible : salon profil désactivé")
     profil_sheet = None
+
+
+ALLIANCE = os.getenv("ALLIANCE", "OUAF")
+
+
+@tree.command(name="niveau-joueur", description="Export CSV du sheet Data OUAF : étable, champi, ouvrières")
+async def niveau_joueur(interaction: discord.Interaction):
+    if profil_sheet is None:
+        await interaction.response.send_message("❌ Le Google Sheet n'est pas configuré. Préviens un admin.",
+                                                ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        texte, avec_ids = await asyncio.to_thread(profil_sheet.export, ALLIANCE)
+    except Exception:
+        logging.exception("export /niveau-joueur impossible")
+        await interaction.followup.send("❌ Export impossible (Google Sheet injoignable). Réessaie plus tard.",
+                                        ephemeral=True)
+        return
+    note = "" if avec_ids else "\n⚠️ API du jeu injoignable : player_id vides, membres absents du sheet manquants."
+    apercu = f"\n```csv\n{texte}```" if len(texte) < 1800 else ""     # copiable sur mobile ; limite Discord 2 000
+    fichier = discord.File(io.BytesIO(texte.encode("utf-8")), filename="niveau_joueur.csv")
+    await interaction.followup.send(f"📄 {texte.count(chr(10)) - 1} joueurs{note}{apercu}", file=fichier,
+                                    ephemeral=True)
 
 
 async def setup_hook():

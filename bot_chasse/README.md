@@ -28,10 +28,18 @@ Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Mi
 - On peut n'en donner qu'une partie (`champi 13`) : les autres valeurs restent.
 - `.env` : `GSHEET_KEY=chemin/vers/cle.json` (compte de service, **Éditeur** sur le sheet) et `PROFIL_SHEET_ID=…`. Sans eux, le salon répond que le sheet n'est pas configuré ; le reste du bot tourne.
 
+## `/niveau-joueur` : export CSV du sheet Data OUAF
+Commande slash, réponse visible de toi seul : un fichier `niveau_joueur.csv` (et son texte, copiable sur mobile).
+- Colonnes : `player_id,pseudo,etable_puceron,champi,ouvriere`, triées par pseudo.
+- Lignes : les membres de l'alliance (`ALLIANCE` dans `.env`, OUAF par défaut) d'après l'API des exports publics du
+  jeu, qui donne le `player_id`, complétés par le sheet (pseudo comparé sans la casse). Valeur absente = 0.
+- Une fiche du sheet dont le pseudo n'est pas dans l'API garde un `player_id` vide. Si l'API est injoignable,
+  l'export part du sheet seul et le bot le signale.
+
 ## Fichiers
 - `risque.py` : lecture du texte et calcul (moteur `hunt_mc.py`, copié depuis `tools/`). Essai : `python risque.py "948 JSN, Armes 2, Bouclier 2, TDC 2 148"`.
 - `niveau_armes.py` : commande `/niveau-armes` (calcul + formulaire, menu, 4 emojis intégrés).
-- `profil.py` : salon profil (lecture du message + écriture dans le Google Sheet).
+- `profil.py` : salon profil (lecture du message + écriture dans le Google Sheet) et export CSV de `/niveau-joueur`.
 - `bot.py` : le bot (lit les salons de `CHANNEL_ID`, séparés par des virgules : un salon par serveur Discord). Dans les salons de `SILENT_CHANNEL_IDS`, il répond sans notification.
 - `.env` (sur le Pi seulement, secret) : `DISCORD_TOKEN=…` et `CHANNEL_ID=…`.
 - `bot-chasse.service` : service systemd (redémarre tout seul).
