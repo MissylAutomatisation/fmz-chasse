@@ -1,5 +1,5 @@
 """Bot Discord « Chasse » : lit des salons dédiés (CHANNEL_ID=id1,id2) ; chaque message (armée, Armes, Bouclier, TDC) reçoit le tableau du
-risque selon la taille de chasse."""
+risque selon la taille de chasse ; une armée seule reçoit le niveau d'Armes rentable."""
 import asyncio
 import io
 import logging
@@ -74,6 +74,13 @@ async def on_message(message: discord.Message):
         await on_profil(message)
         return
     if message.channel.id not in CHANNEL_IDS:
+        return
+    silent = message.channel.id in SILENT_CHANNEL_IDS
+    if await niveau_armes.answer_unit_name(message, silent):  # réponse à « Quelle unité produis-tu ? »
+        return
+    army = risque.army_only(message.content)
+    if army:                                                   # armée seule : niveau d'Armes rentable
+        await niveau_armes.ask_in_channel(message, army, armes_emojis, silent)
         return
     async with message.channel.typing():                       # le calcul prend quelques secondes
         try:

@@ -287,6 +287,81 @@ def test_armes_menu_contient_les_artilleuses():
     assert "Artilleuse" in [o.value for o in select.options]
 
 
+def test_armes_artilleuses_juste_apres_les_js_dans_le_menu():
+    assert [label for label, _, _ in na.CHOICES] == [
+        "Jeunes Soldates Naines", "Jeunes Soldates", "Artilleuses", "Tanks", "Tueuses d’élite"]
+
+
+def test_armes_affichage_niveau_en_gros_et_reste_sur_une_ligne():
+    embed = na.result_embed(na.parse_army(ARMY_REF), "JS")
+    level, line = embed.description.split("\n")
+    assert level == "# Armes 4"
+    assert line == "FdF HB 10 765 · Armes 5 à 14 530 HB (manque 3 765) · Ponte : Jeune Soldate"
+    top = na.result_embed({"Tank": 10 ** 21}, "JSN")
+    assert top.description.startswith("# Armes 50 ou plus\n")
+
+
+ARMY_ONLY = ("8 468 Jeunes Soldates Naines, 1 322 Soldates Naines, 219 Naines d’Elites, 10 552 Jeunes Soldates, "
+             "850 Soldates, 44 Soldates d’élites.")
+
+
+@pytest.mark.parametrize("text, expected", [
+    (ARMY_ONLY, {"jsn": 8468, "sn": 1322, "ne": 219, "js": 10552, "s": 850, "se": 44}),
+    ("Armée : 600 JS, 43 S", {"js": 600, "s": 43}),
+    ("Jeune Soldate Naine 1 208\nSoldate 43", {"jsn": 1208, "s": 43}),
+    ("1 208 JSN + 99 SN, Armes 1", None),
+    ("600 JSN, Bouclier 2", None),
+    ("600 JSN, TDC 300", None),
+    ("600 JSN, perte 100", None),
+    ("600 JSN, réplique 30", None),
+    ("bonjour", None),
+])
+def test_salon_armee_seule(text, expected):
+    assert risque.army_only(text) == expected
+
+
+def test_armee_n_est_pas_armes():
+    assert risque.parse("Armée : 600 JS, 43 S, Armes 1, TDC 100") == ({"js": 600, "s": 43}, 1, 0, 100)
+
+
+def test_armes_armee_du_salon_convertie():
+    army = na.from_hunt_army(risque.army_only(ARMY_REF))
+    assert army == na.parse_army(ARMY_REF)
+
+
+class _ChannelMessage:
+    def __init__(self, author_id, channel_id, content):
+        self.author = SimpleNamespace(id=author_id)
+        self.channel = SimpleNamespace(id=channel_id)
+        self.content = content
+        self.replies = []
+
+    async def reply(self, content=None, **kwargs):
+        self.replies.append((content, kwargs))
+        sent = _Message()
+        return sent
+
+
+def test_armes_salon_question_puis_nom_de_l_unite():
+    async def scenario():
+        na.SESSIONS.pending.clear()
+        emojis = SimpleNamespace(values={}, ensure=lambda: _record([], (), {}))
+        msg = _ChannelMessage(1, 10, ARMY_REF)
+        await na.ask_in_channel(msg, risque.army_only(ARMY_REF), emojis, silent=True)
+        assert "Quelle unité" in msg.replies[0][0] and msg.replies[0][1]["silent"]
+        view = na.SESSIONS.pending[1]
+        view.message = _Message()
+        # autre salon, autre joueur ou texte qui n'est pas une unité : ignorés
+        assert not await na.answer_unit_name(_ChannelMessage(1, 11, "JS"), True)
+        assert not await na.answer_unit_name(_ChannelMessage(2, 10, "JS"), True)
+        assert not await na.answer_unit_name(_ChannelMessage(1, 10, "salut"), True)
+        assert await na.answer_unit_name(_ChannelMessage(1, 10, "Jeunes Soldates"), True)
+        assert view.message.edits[-1]["embed"].description.startswith("# Armes 4\n")
+        assert 1 not in na.SESSIONS.pending
+
+    asyncio.run(scenario())
+
+
 def test_armes_egalite_au_seuil_et_juste_en_dessous():
     assert na.analyse_armes("674 JS + 2 JSN", "JS")["niveau_max"] == 4      # 6 746 HB = S(4) en JS : rentable
     assert na.analyse_armes("674 JS + 1 SN", "JS")["niveau_max"] == 3       # 6 745 HB : un de moins
@@ -323,7 +398,7 @@ def test_armes_ouvriere_refusee_comme_production():
 
 def _interaction(user_id):
     sent = []
-    response = SimpleNamespace(send_message=lambda *a, **k: _record(sent, a, k))
+    response = SimpleNamespace(send_message=lambda *a, **k: _record(sent, a, k), defer=lambda: _record([], (), {}))
     return SimpleNamespace(user=SimpleNamespace(id=user_id), response=response), sent
 
 

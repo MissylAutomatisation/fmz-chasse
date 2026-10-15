@@ -52,9 +52,9 @@ DEFAULT_DATA = {
 CHOICES = (
     ("Jeunes Soldates Naines", "armes_jsn_gnome", "🧙‍♂️"),
     ("Jeunes Soldates", "armes_js_casque", "🪖"),
+    ("Artilleuses", "armes_artilleuse", "💣"),
     ("Tanks", "armes_tank", "🛡️"),
     ("Tueuses d’élite", "armes_tueuse_boss", "👹"),
-    ("Artilleuses", "armes_artilleuse", "💣"),
 )
 TIMEOUT = 300                                                       # une question expire après 5 min
 
@@ -183,18 +183,18 @@ def fmt(value) -> str:
 
 
 def result_embed(army: dict[str, int], produced: str, data: WeaponsData = DATA) -> discord.Embed:
+    """Le niveau maximal en gros, le reste sur une ligne."""
     result = calculate(army, produced, data)
-    embed = discord.Embed(title="Rentabilité des armes", color=discord.Color.blurple())
-    embed.add_field(name="Unité produite", value=data.unit(produced).name, inline=False)
-    embed.add_field(name="FdF actuelle hors bonus (HB)", value=fmt(result.hb), inline=False)
-    embed.add_field(name="Niveau maximal rentable",
-                    value=f"Armes {result.level}" if result.next_level else f"Au moins Armes {result.level}",
-                    inline=False)
+    unit = data.unit(produced).name
     if result.next_level:
-        embed.add_field(name=f"FdF HB cible pour Armes {result.next_level}", value=fmt(result.next_hb), inline=False)
+        level = f"# Armes {result.level}"
+        line = (f"FdF HB {fmt(result.hb)} · Armes {result.next_level} à {fmt(result.next_hb)} HB "
+                f"(manque {fmt(result.next_hb - result.hb)}) · Ponte : {unit}")
     else:
-        embed.add_field(name="Niveau suivant", value="Au-delà des niveaux disponibles dans la BDD.", inline=False)
-    embed.set_footer(text="Ponte continue · paramètres « calcul manuel » · arrondi final uniquement")
+        level = f"# Armes {result.level} ou plus"
+        line = f"FdF HB {fmt(result.hb)} · tous les niveaux de la BDD sont rentables · Ponte : {unit}"
+    embed = discord.Embed(title="Niveau maximal rentable", description=f"{level}\n{line}", color=discord.Color.green())
+    embed.set_footer(text="HB = hors bonus · ponte continue")
     return embed
 
 
@@ -268,9 +268,11 @@ class UnitSelect(discord.ui.Select):
 
 
 class UnitView(discord.ui.View):
-    def __init__(self, owner_id: int, army: dict[str, int], sessions: Sessions, emojis: dict, data: WeaponsData = DATA):
+    def __init__(self, owner_id: int, army: dict[str, int], sessions: Sessions, emojis: dict, data: WeaponsData = DATA,
+                 channel_id: int | None = None):
         super().__init__(timeout=TIMEOUT)
         self.owner_id = owner_id
+        self.channel_id = channel_id                                # salon chasse : le nom de l'unité peut y être envoyé
         self.army = army
         self.data = data
         self.sessions = sessions
@@ -292,22 +294,28 @@ class UnitView(discord.ui.View):
         self.stop()
         self.sessions.done(self)
 
-    async def finish(self, interaction: discord.Interaction, name: str):
-        if not await self.interaction_check(interaction):          # le formulaire texte ne passe pas par la View
-            return
+    async def show(self, name: str, defer=None) -> str | None:
+        """Remplace la question par le résultat ; renvoie le message d'erreur sinon."""
         async with self.lock:
             if self.finished or time.monotonic() >= self.expires:
-                await interaction.response.send_message(
-                    "Cette question est terminée ou expirée. Relance `/niveau-armes`.", ephemeral=True)
-                return
+                return "Cette question est terminée ou expirée. Relance `/niveau-armes`."
             try:
                 embed = result_embed(self.army, name, self.data)
             except ArmesError as exc:
-                await interaction.response.send_message(str(exc), ephemeral=True)
-                return
-            await interaction.response.defer()                      # le formulaire n'a pas toujours le message d'origine
+                return str(exc)
+            if defer:
+                await defer()
             await self.message.edit(content=None, embed=embed, view=None)
             self.complete()
+        return None
+
+    async def finish(self, interaction: discord.Interaction, name: str):
+        if not await self.interaction_check(interaction):          # le formulaire texte ne passe pas par la View
+            return
+        # defer : le formulaire n'a pas toujours le message d'origine
+        error = await self.show(name, interaction.response.defer)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
 
     @discord.ui.button(label="Saisir le nom de l'unité", style=discord.ButtonStyle.secondary, row=1)
     async def type_unit(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -351,14 +359,46 @@ class ArmyModal(discord.ui.Modal, title="Rentabilité des armes"):
         view.message = await interaction.followup.send("Quelle unité produis-tu ?", view=view, ephemeral=True, wait=True)
 
 
+SESSIONS = Sessions()                                               # partagé par /niveau-armes et le salon chasse
+
+
+def from_hunt_army(army: dict[str, int], data: WeaponsData = DATA) -> dict[str, int]:
+    """Armée du moteur de chasse ({"jsn": n}) -> noms de l'onglet « calcul manuel »."""
+    return {data.unit(key).name: count for key, count in army.items()}
+
+
+async def ask_in_channel(message: discord.Message, army: dict[str, int], emojis: WeaponsEmojis, silent: bool):
+    """Armée seule collée dans le salon chasse : demande l'unité pondue en réponse au message."""
+    await emojis.ensure()
+    view = UnitView(message.author.id, from_hunt_army(army), SESSIONS, emojis.values, channel_id=message.channel.id)
+    await SESSIONS.replace(message.author.id, view)
+    view.message = await message.reply(
+        "Quelle unité produis-tu ? Choisis dans le menu ou envoie son nom (singulier ou pluriel) dans ce salon.",
+        view=view, mention_author=False, silent=silent)
+
+
+async def answer_unit_name(message: discord.Message, silent: bool) -> bool:
+    """Nom d'unité envoyé dans le salon pour une question en cours ; False si le message n'en est pas un."""
+    view = SESSIONS.pending.get(message.author.id)
+    if view is None or view.channel_id != message.channel.id:
+        return False
+    try:
+        name = DATA.unit(message.content).name
+    except ArmesError:
+        return False
+    error = await view.show(name)
+    if error:
+        await message.reply(error, mention_author=False, silent=silent)
+    return True
+
+
 def setup(client: discord.Client, tree: app_commands.CommandTree) -> WeaponsEmojis:
     """Ajoute /niveau-armes à l'arbre du bot. Ne synchronise pas : à faire une fois toutes les commandes ajoutées."""
     emojis = WeaponsEmojis(client)
-    sessions = Sessions()
 
     @tree.command(name="niveau-armes", description="Niveau d'Armes rentable et FdF HB du niveau suivant")
     async def niveau_armes(interaction: discord.Interaction):
-        await interaction.response.send_modal(ArmyModal(emojis, sessions))
+        await interaction.response.send_modal(ArmyModal(emojis, SESSIONS))
 
     return emojis
 

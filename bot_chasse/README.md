@@ -12,10 +12,12 @@ Ajoute `perte 100` pour avoir seulement la plus grosse chasse dont le **pire cas
 
 Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates Naines… »). Unités : toutes (JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE), noms longs ou abréviations ; S, C et A seuls en majuscule. Armes et Bouclier absents = niveau 0. Le TDC est obligatoire.
 
+Armée seule (sans Armes, Bouclier, TDC, perte ni réplique) : le bot calcule le niveau d'Armes rentable au lieu du tableau. Il demande l'unité pondue (menu, bouton, ou son nom envoyé dans le salon), puis remplace la question par le résultat.
+
 `/niveau-armes` (commande slash, réponse visible de toi seul) : niveau d'Armes rentable.
 1. Un formulaire s'ouvre : colle ton armée (`600 Jeunes Soldates Naines, 236 SN, 700 JS`). Toutes les unités sont acceptées, noms complets (singulier ou pluriel) ou abréviations, séparées par des virgules, `;`, `+` ou des lignes. Une unité inconnue est refusée (sinon la FdF serait trop basse).
-2. Choisis l'unité que tu ponds dans le menu (JSN, JS, Tanks, Tueuses d'élite, Artilleuses), ou clique « Saisir le nom de l'unité » pour une autre.
-3. Le bot affiche la FdF hors bonus (HB), le niveau max rentable et la FdF HB qu'il faut pour le niveau suivant.
+2. Choisis l'unité que tu ponds dans le menu (JSN, JS, Artilleuses, Tanks, Tueuses d'élite), ou clique « Saisir le nom de l'unité » pour une autre.
+3. Le bot affiche en gros le niveau max rentable, puis sur une ligne : FdF hors bonus (HB), FdF HB du niveau suivant, ce qui manque, unité pondue.
 
 Modèle (onglet « calcul manuel » du classeur BDD, valeurs intégrées dans `niveau_armes.py`) : passer à Armes n coûte C(n) = 80 × 2^(n−1) ouvrières de 60 s. Le niveau est rentable si 10 % de la FdF HB ≥ la FdF des unités pondues pendant ce temps à Armes n−1, soit HB ≥ S(n) = plafond(C(n) × 60 / ponte × attaque × (n + 9)). Ponte continue : seul S(n) est arrondi. Une question expire après 5 minutes ; relancer la commande remplace l'ancienne.
 

@@ -35,7 +35,8 @@ UNIT_WORDS = [(r"jeunes?\s+soldates?\s+naines?", "jsn", False), (r"jeunes?\s+sol
               (r"tks?", "tk", False), (r"tues?", "tue", False), (r"tus?", "tu", False),
               (r"S", "s", True), (r"C", "c", True), (r"A", "a", True)]   # lettres seules : en majuscule seulement
 UNIT_ORDER = list(hunt_mc.UNITS)                     # affichage dans l'ordre du jeu
-LEVEL_WORDS = [(r"bouc[^\W\d_]*(?:\s+thoraciques?)?", "bouclier"), (r"arm[^\W\d_]*", "armes")]   # lettres seules : « armes1 »
+# lettres seules : « armes1 » ; « Armée » n'est pas « Armes »
+LEVEL_WORDS = [(r"bouc[^\W\d_]*(?:\s+thoraciques?)?", "bouclier"), (r"arm(?![ée]es?\b)[^\W\d_]*", "armes")]
 TDC_WORDS = r"tdc|terrains?(?:\s+de\s+chasse)?|cm²|cm2|cm"
 TARGETS = (1, 2, 5, 7.5, 10, 15, 20)                          # niveaux de risque (%) des tailles repères
 MAX_SIZE = 5000
@@ -78,7 +79,7 @@ def parse(text, need_tdc=True):
     rest = " " + text.replace("\n", " ; ") + " "
     levels = {}
     for word, key in LEVEL_WORDS:                     # niveaux : 1 ou 2 chiffres, nombre plutôt après le mot
-        found, rest = take(rest, word, r"\d{1,2}", after_first=True)
+        found, rest = take(rest, word, r"\d{1,2}(?!\d)", after_first=True)
         levels[key] = found[0] if found else 0
     tdc, rest = take(rest, TDC_WORDS, NUM, after_first=True)
     # unités : « 1 208 JSN » d'habitude ; « JSN 1208 » si le texte commence par un nom d'unité
@@ -94,6 +95,21 @@ def parse(text, need_tdc=True):
     if not tdc and need_tdc:
         raise ParseError("TDC introuvable. Exemple : TDC 2 770")
     return army, levels["armes"], levels["bouclier"], tdc[0] if tdc else None
+
+
+def army_only(text):
+    """Armée seule, sans Armes, Bouclier, TDC, perte ni réplique -> {unité: n} ; None sinon."""
+    if re.search(REPLIQUE_WORDS, text, re.I):
+        return None
+    rest = " " + text.replace("\n", " ; ") + " "
+    for word in [w for w, _ in LEVEL_WORDS] + [TDC_WORDS, PERTE_WORDS]:
+        found, rest = take(rest, word, NUM, after_first=True)
+        if found:
+            return None
+    try:
+        return parse(text, need_tdc=False)[0]
+    except ParseError:
+        return None
 
 
 _STATS = {}
