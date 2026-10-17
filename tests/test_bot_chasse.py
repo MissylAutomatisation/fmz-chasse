@@ -78,6 +78,14 @@ def test_etoile_sur_la_plus_grosse_chasse_rentable():
     assert 66 <= star <= 78 <= fire + 4 and fire >= star
 
 
+def test_pas_de_plafond_de_taille():
+    """Grosse armée (RC du salon chasse-bot) : ⭐ au-delà de 5 000 cm², jamais sur une chasse perdue."""
+    army = {"jsn": 3905, "sn": 502, "js": 4398, "s": 1372, "a": 4642}
+    rows = risque.key_rows(army, 7, 7, 16154)
+    star = next(r for r in rows if "⭐" in r[5])
+    assert star[0] > 5000 and star[3] < sum(army.values())
+
+
 def test_meilleur_ratio_vraiment_le_meilleur():
     """📈 = vrai sommet du cm²/perte (~95 cm² ici), pas la meilleure taille repère : le bouclier ne le fait pas reculer."""
     army = {"jsn": 944, "sn": 184, "ne": 1, "js": 219, "s": 2}

@@ -39,7 +39,6 @@ UNIT_ORDER = list(hunt_mc.UNITS)                     # affichage dans l'ordre du
 LEVEL_WORDS = [(r"bouc[^\W\d_]*(?:\s+thoraciques?)?", "bouclier"), (r"arm(?![ée]es?\b)[^\W\d_]*", "armes")]
 TDC_WORDS = r"tdc|terrains?(?:\s+de\s+chasse)?|cm²|cm2|cm"
 TARGETS = (1, 2, 5, 7.5, 10, 15, 20)                          # niveaux de risque (%) des tailles repères
-MAX_SIZE = 5000
 STARS = ((0.85, "⭐"), (0.80, "🔥"))               # plus grosse chasse qui garde 85 % / 80 % du meilleur cm²/perte
 BUCKETS = 4                                          # tranches égales de 0 à la limite, sous « perte XXX »
 NEXT_HUNTS = 5                                       # chasses ⭐ prévues à la suite, pire cas de pertes retiré à chaque fois
@@ -225,13 +224,19 @@ def largest_size(risk, target, hi):
     return lo
 
 
+def upper_size(ok):
+    """Première taille (8, 16, 32…) où ok devient faux : borne haute de la recherche dichotomique. Pas de plafond :
+    une chasse assez grosse finit toujours perdue."""
+    hi = 8
+    while ok(hi):
+        hi *= 2
+    return hi
+
+
 def sizes(army, tdc, armes, bouclier, n=5000, rep=10):
     """Tailles de chasse pour chaque niveau de risque de TARGETS (sans doublon, croissantes)."""
     risk = lambda size: stats(army, tdc, size, armes, bouclier, n, rep=rep)[0]
-    hi = 8
-    while hi < MAX_SIZE and risk(hi) <= TARGETS[-1]:
-        hi *= 2
-    found = [largest_size(risk, t, min(hi, MAX_SIZE)) for t in TARGETS]
+    found = [largest_size(risk, t, upper_size(lambda s: risk(s) <= TARGETS[-1])) for t in TARGETS]
     return sorted({s for s in found if s > 0})
 
 
@@ -261,19 +266,24 @@ def star_sizes(army, tdc, armes, bouclier, rows, n=5000):         # même n que 
 
     Le rendement ne baisse pas régulièrement : il remonte par endroits (paliers de réplique 10/30/50 %). On balaie donc
     les tailles au-delà du meilleur (même au-delà de 20 % de risque) jusqu'à ce qu'il reste sous le seuil le plus bas
-    sur 20 % de taille, puis on affine au cm² près."""
+    sur 20 % de taille, puis on affine au cm² près. Une chasse dont le pire cas tue toute l'armée est perdue : son
+    cm²/perte ne veut plus rien dire (il monte avec la taille), le balayage s'arrête avant."""
     best_size, best = max(((r[0], r[4]) for r in rows), key=lambda x: x[1])
-    per_loss = lambda s: (lambda m: s / m if m else float("inf"))(stats(army, tdc, s, armes, bouclier, n)[1])
+    total = sum(army.values())
+
+    def per_loss(s):
+        _, mean, worst, *_ = stats(army, tdc, s, armes, bouclier, n)
+        return 0 if worst >= total else s / mean if mean else float("inf")
     limits = [keep * best for keep, _ in STARS]
     step = max(1, best_size // 40)
     last = [best_size] * len(STARS)                   # plus grosse taille vue au-dessus de chaque seuil
     s = best_size
-    while s + step <= MAX_SIZE and s - max(last) < max(5 * step, 0.2 * s):
+    while s - max(last) < max(5 * step, 0.2 * s):
         s += step
         ratio = per_loss(s)
         last = [s if ratio >= lim else l for lim, l in zip(limits, last)]
     for k, lim in enumerate(limits):                  # au cm² près, juste après la dernière taille retenue
-        last[k] = max([last[k]] + [t for t in range(last[k] + 1, min(last[k] + step, MAX_SIZE + 1)) if per_loss(t) >= lim])
+        last[k] = max([last[k]] + [t for t in range(last[k] + 1, last[k] + step) if per_loss(t) >= lim])
     marks = {}
     for size, (_, symbol) in zip(last, STARS):
         marks.setdefault(size, symbol)                # même taille pour les deux : on garde ⭐
@@ -377,9 +387,9 @@ def max_loss_size(army, armes, bouclier, tdc, cap, n=5000):
     Le pire cas monte avec la taille mais pas régulièrement (194 cm² : 102, 196 cm² : 101) : après la recherche
     dichotomique, on balaie au cm² près jusqu'à 5 % au-delà de la dernière taille retenue."""
     worst = lambda s: stats(army, tdc, s, armes, bouclier, n)[2]
-    best = largest_size(worst, cap, MAX_SIZE)
+    best = largest_size(worst, cap, upper_size(lambda s: worst(s) <= cap))
     s = best
-    while s < MAX_SIZE and s - best < max(5, best // 20):
+    while s - best < max(5, best // 20):
         s += 1
         if worst(s) <= cap:
             best = s
