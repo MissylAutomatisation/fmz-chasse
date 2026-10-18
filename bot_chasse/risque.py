@@ -41,7 +41,6 @@ TDC_WORDS = r"tdc|terrains?(?:\s+de\s+chasse)?|cm²|cm2|cm"
 TARGETS = (1, 2, 5, 7.5, 10, 15, 20)                          # niveaux de risque (%) des tailles repères
 STARS = ((0.85, "⭐"), (0.80, "🔥"))               # plus grosse chasse qui garde 85 % / 80 % du meilleur cm²/perte
 BUCKETS = 4                                          # tranches égales de 0 à la limite, sous « perte XXX »
-NEXT_HUNTS = 5                                       # chasses ⭐ prévues à la suite, pire cas de pertes retiré à chaque fois
 REPLIQUES = {10: 3, 30: 2, 50: 1.5}                  # réplique comptée (%) -> l'attaque doit dépasser ce multiple de la vie
 REPLIQUE_WORDS = r"r[ée]pli(?:que)?s?\s*[:=]?\s*(\d+)\s*%?"   # « réplique 30 », « Replique: 50 % », « répli 30 »
 PERTE_WORDS = r"pertes?(?:\s+max(?:imum|imales?|i)?)?"      # « perte 100 », « pertes max 100 », « 100 pertes »
@@ -324,44 +323,19 @@ def key_rows(army, armes, bouclier, tdc, n=5000, rep=10):
     return [row(s) + (roles[s],) for s in sorted(roles)]
 
 
-def next_hunts(army, armes, bouclier, tdc, n=5000, rep=10):
-    """Les NEXT_HUNTS chasses ⭐ à la suite : [(TDC, taille, pire cas)], puis l'armée et le TDC après.
-
-    Entre deux chasses, le TDC monte de la taille chassée et l'armée perd le pire cas (prudent : une grosse réplique
-    sur la 1re chasse pèse aussi sur les suivantes). Les plus faibles meurent d'abord (ordre du jeu)."""
-    plan = []
-    for _ in range(NEXT_HUNTS):
-        rows = key_rows(army, armes, bouclier, tdc, n, rep)
-        star = next((r for r in rows if "⭐" in r[5]), None)
-        if star is None:
-            break
-        plan.append((tdc, star[0], star[3]))
-        tdc, army = tdc + star[0], lose(army, star[3])
-    return plan, army, tdc
+def fdf(army, armes):
+    """Force de frappe : attaque totale de l'armée avec le bonus d'Armes (+10 % par niveau)."""
+    return round(sum(hunt_mc.UNITS[u][1] * k for u, k in army.items()) * (1 + 0.1 * armes))
 
 
-def lose(army, k):
-    """L'armée après k pertes, les unités les plus faibles d'abord."""
-    left = {}
-    for u, count in army.items():                                          # army est dans l'ordre du jeu
-        dead = min(count, k)
-        k -= dead
-        if count - dead:
-            left[u] = count - dead
-    return left
-
-
-WAIT_PLAN = "📅 Calcul des prochaines chasses ⭐…"
-
-
-def table(army, armes, bouclier, tdc, n=5000, plan=True, rep=10):
-    """Le message prêt à coller sur Discord (avec les ```), étroit pour le téléphone : les lignes utiles et les
-    prochaines chasses ⭐ (plan=False : WAIT_PLAN à la place, le bot répond d'abord vite puis complète)."""
+def table(army, armes, bouclier, tdc, n=5000, rep=10):
+    """Le message prêt à coller sur Discord (avec les ```), étroit pour le téléphone : les lignes utiles."""
     rows = key_rows(army, armes, bouclier, tdc, n, rep)
     if not rows:
         return "```\n🎯 Aucune chasse possible : armée trop faible pour ce TDC.\n```"
     lines = ["```", "🎯 Chasses conseillées" + (f" (réplique {rep} %)" if rep != 10 else ""),
-             f"   ({army_text(army)}, Armes {armes}, Bouclier {bouclier}, TDC {fmt_n(tdc)})", "",
+             f"   ({army_text(army)}, Armes {armes}, Bouclier {bouclier}, TDC {fmt_n(tdc)})",
+             f"   (FDF : {fmt_n(fdf(army, armes))})", "",
              f" Chasse  | Réplique > {rep} % | Pertes moy. | cm²/perte | Pire cas",
              "---------+-----------------+-------------+-----------+---------"]
     for s, risk, mean, worst, per_loss, roles in rows:
@@ -370,14 +344,6 @@ def table(army, armes, bouclier, tdc, n=5000, plan=True, rep=10):
     lines += ["🛡 min. pertes  📈 meilleur cm²/perte",
               f"⭐ opti ({round(STARS[0][0] * 100)} % du meilleur{f' en réplique {rep} %' if rep != 10 else ''})  "
               f"🔥 flemme ({round(STARS[1][0] * 100)} %)"]
-    if not plan:
-        return "\n".join(lines + ["", WAIT_PLAN, "```"])
-    plan, army_after, tdc_after = next_hunts(army, armes, bouclier, tdc, n, rep)
-    if len(plan) > 1:
-        lines += ["", f"📅 {len(plan)} prochaines chasses ⭐ (pire cas retiré à chaque fois)",
-                  " #  | TDC     | Chasse  | Pire", "----+---------+---------+-----"]
-        lines += [f" {i}  | {fmt_n(t):<7} | {f'{s} cm²':<7} | {w}" for i, (t, s, w) in enumerate(plan, 1)]
-        lines.append(f"Après : TDC {fmt_n(tdc_after)}, armée {army_text(army_after) or 'détruite'}")
     return "\n".join(lines + ["```"])
 
 
@@ -397,7 +363,7 @@ def max_loss_size(army, armes, bouclier, tdc, cap, n=5000):
 
 
 def loss_table(army, armes, bouclier, tdc, cap, n=5000):
-    """Une seule ligne : la plus grosse chasse avec au pire cap pertes. Sans réplique ni prochaines chasses."""
+    """Une seule ligne : la plus grosse chasse avec au pire cap pertes. Sans réplique."""
     cap = min(cap, sum(army.values()) - 1)            # toute l'armée perdue = chasse perdue : jamais proposée
     head = [f"🎯 Chasse pour {fmt_n(cap)} pertes max",
             f"   ({army_text(army)}, Armes {armes}, Bouclier {bouclier}, TDC {fmt_n(tdc)})", ""]
@@ -442,8 +408,8 @@ ENORME_TEUB = r"""```
 ```"""
 
 
-def answer(text, plan=True):
-    """Réponse du bot à un texte collé (tableau, ou message d'erreur). plan=False : sans les prochaines chasses."""
+def answer(text):
+    """Réponse du bot à un texte collé (tableau, ou message d'erreur)."""
     if re.search(r"[ée]norme\s+teub", text, re.IGNORECASE):     # easter egg
         return ENORME_TEUB
     raw = text
@@ -457,7 +423,7 @@ def answer(text, plan=True):
         return f"❌ {e}\nExemple : `1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770` (+ `réplique 30` ou `perte 100` si besoin)"
     if cap is not None:
         return loss_table(army, armes, bouclier, tdc, cap)
-    return table(army, armes, bouclier, tdc, plan=plan, rep=rep)
+    return table(army, armes, bouclier, tdc, rep=rep)
 
 
 def replique(text):

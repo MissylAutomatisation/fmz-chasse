@@ -31,43 +31,24 @@ def test_risque_comme_le_calcul_du_04_10():
 
 
 def test_tableau_pret_pour_discord():
-    """Seulement les lignes utiles (🛡 📈 ⭐ 🔥), puis les 5 prochaines chasses ⭐."""
+    """Seulement les lignes utiles (🛡 📈 ⭐ 🔥), avec la FDF, sans prochaines chasses."""
     out = risque.answer("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770")
     lines = out.splitlines()
     assert lines[0] == lines[-1] == "```"
     assert lines[2] == "   (1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770)"
-    rows = lines[6:lines.index("🛡 min. pertes  📈 meilleur cm²/perte")]
+    assert lines[3] == "   (FDF : 4 531)"                                  # (1 208 × 3 + 99 × 5) × 1,1
+    rows = lines[7:lines.index("🛡 min. pertes  📈 meilleur cm²/perte")]
     sizes = [int(r.split()[0]) for r in rows]
     assert sizes == sorted(sizes) and 55 <= sizes[0] <= 64 and 2 <= len(rows) <= 4
     assert all(len(r.split("|")) == 5 for r in rows)
     roles = "".join(r.split()[-1] for r in rows)
     assert sorted(roles) == sorted("🛡📈⭐🔥") and "🛡" in rows[0]
-    plan = lines[lines.index("📅 5 prochaines chasses ⭐ (pire cas retiré à chaque fois)") + 3:-2]
-    assert [r.split()[0] for r in plan] == ["1", "2", "3", "4", "5"]
-    assert plan[0].split("|")[2].split()[0] == next(r for r in rows if "⭐" in r).split()[0]
-    assert lines[-2].startswith("Après : TDC ")
+    assert "📅" not in out and lines[-2].startswith("⭐ opti")
 
 
-def test_reponse_rapide_puis_prochaines_chasses():
-    fast = risque.answer("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770", plan=False)
-    full = risque.answer("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770")
-    assert risque.WAIT_PLAN in fast and "📅 5 prochaines" not in fast
-    assert full.startswith(fast.split("\n\n" + risque.WAIT_PLAN)[0])    # même tableau, complété
-
-
-def test_prochaines_chasses_pire_cas_retire():
-    """Le TDC monte de la taille chassée, l'armée perd le pire cas (JSN d'abord), la ⭐ ne saute pas au hasard."""
-    army = {"jsn": 948}
-    plan, after, tdc = risque.next_hunts(army, 2, 2, 2148)
-    assert len(plan) == 5 and plan[0][0] == 2148
-    for (t1, s1, w1), (t2, s2, _) in zip(plan, plan[1:]):
-        assert t2 == t1 + s1 and abs(s2 - s1) <= 6
-    assert tdc == plan[-1][0] + plan[-1][1] and after == {"jsn": 948 - sum(w for _, _, w in plan)}
-
-
-def test_pertes_les_plus_faibles_d_abord():
-    assert risque.lose({"jsn": 10, "sn": 5}, 12) == {"sn": 3}
-    assert risque.lose({"jsn": 10}, 30) == {}
+def test_fdf_avec_bonus_armes():
+    assert risque.fdf({"jsn": 1208, "sn": 99}, 0) == 4119
+    assert risque.fdf({"js": 100}, 5) == 1500
 
 
 def test_etoile_sur_la_plus_grosse_chasse_rentable():
@@ -161,7 +142,7 @@ def test_replique_par_defaut_10_et_valeur_impossible():
 def test_tableau_replique_30():
     """Même modèle, colonne « Réplique > 30 % » et chasses plus grosses qu'en 10 %."""
     text = "1 050 JSN + 154 SN + 218 JS, Armes 1, Bouclier 1, TDC 3 770"
-    normal, rep30 = risque.answer(text, plan=False), risque.answer(text + ", réplique 30", plan=False)
+    normal, rep30 = risque.answer(text), risque.answer(text + ", réplique 30")
     assert "Réplique > 10 %" in normal and "Chasses conseillées\n" in normal
     assert "Réplique > 30 %" in rep30 and "🎯 Chasses conseillées (réplique 30 %)" in rep30
     first = lambda out: int(next(l for l in out.splitlines() if "🛡" in l and "|" in l).split()[0])
@@ -186,7 +167,7 @@ def test_perte_toutes_les_ecritures(suffix):
 
 
 def test_tableau_perte_max_une_ligne():
-    """Plus grosse chasse au pire cas ≤ 100 : une ligne, sans colonne réplique ni prochaines chasses."""
+    """Plus grosse chasse au pire cas ≤ 100 : une ligne, sans colonne réplique."""
     out = risque.answer("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100")
     lines = out.splitlines()
     assert lines[0] == lines[-1] == "```" and lines[1] == "🎯 Chasse pour 100 pertes max"
