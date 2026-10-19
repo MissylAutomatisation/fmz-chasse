@@ -48,7 +48,8 @@ PERTE_WORDS = r"pertes?(?:\s+max(?:imum|imales?|i)?)?"      # « perte 100 », �
 VC_WORDS = r"vc|vitesses?\s+de\s+chasses?"           # « vc 2 », « Vitesse de chasse 2 » : VC + 1 chasses simultanées
 HUNTS_WORDS = r"(?<!de )chasses?|multi[\s-]?chasses?"   # « 3 chasses », « chasses 3 » ; pas « terrain de chasse »
 MAX_HUNTS = 20
-CHOICE_DRAWS = 1000                                  # tirages pour comparer les nombres de chasses (les tableaux : 5 000)
+MIN_HUNT_SHARE = 30                                  # taille mini d'une chasse en multi : 30 % du TDC (Calystène)
+CHOICE_DRAWS = 1000                                  # tirages pour choisir le nombre de chasses (le tableau en garde 5 000)
 
 
 class ParseError(ValueError):
@@ -376,52 +377,15 @@ def fdf(army, armes):
     return round(sum(hunt_mc.UNITS[u][1] * k for u, k in army.items()) * (1 + 0.1 * armes))
 
 
-def compare_hunts(army, armes, bouclier, tdc, vc, rep=10, n=CHOICE_DRAWS):
-    """Pour 1 à VC + 1 chasses simultanées, la chasse ⭐ de chaque option : [{"hunts", "size", "total", "mean",
-    "per_loss", "per_hour"}]. Durée d'une chasse = (TDC au lancement + taille) × 0,9^VC (Calystène v2).
-
-    Le cm²/heure monte puis redescend avec le nombre de chasses, le cm²/perte ne fait que baisser : on s'arrête après
-    deux baisses de suite du cm²/heure."""
-    options, drops = [], 0
-    for hunts in range(1, vc + 2):
+def best_hunts(army, armes, bouclier, tdc, max_hunts, rep=10, n=CHOICE_DRAWS):
+    """Nombre de chasses simultanées, comme le mode auto de Calystène : le plus grand nombre (≤ max_hunts) dont la
+    chasse ⭐ fait au moins MIN_HUNT_SHARE % du TDC ; 1 sinon."""
+    floor = round(tdc * MIN_HUNT_SHARE / 100)
+    for hunts in range(max_hunts, 1, -1):
         rows = key_rows(army, armes, bouclier, tdc, n, rep, hunts)
-        star = next((r for r in rows if "⭐" in r[5]), None)
-        if star is None:
-            break
-        size, _, mean, _, per_loss, _ = star
-        hours = (tdc + size) * 0.9 ** vc / 3600
-        options.append({"hunts": hunts, "size": size, "total": hunts * size, "mean": mean, "per_loss": per_loss,
-                        "per_hour": hunts * size / hours})
-        drops = drops + 1 if len(options) > 1 and options[-1]["per_hour"] < options[-2]["per_hour"] else 0
-        if drops == 2:
-            break
-    return options
-
-
-def compare_vc(text, fiche=None):
-    """VC si la réponse va comparer plusieurs nombres de chasses (calcul long : prévenir le joueur), sinon None."""
-    try:
-        found = read(text)
-    except ParseError:
-        return None
-    vc = found["vc"] if found["vc"] is not None else (fiche or {}).get("vc")
-    return vc if vc and not found["hunts"] and found["cap"] is None else None
-
-
-def comparison(options, vc):
-    """Bloc « Combien de chasses ? » : une ligne par option, 🛡 = meilleur cm²/perte, 🚀 = plus de cm²/heure."""
-    safe = max(options, key=lambda o: o["per_loss"])
-    fast = max(options, key=lambda o: o["per_hour"])
-    lines = ["```", f"🔀 Combien de chasses en même temps ? (VC {vc} : jusqu'à {vc + 1})",
-             "   (chaque option à sa taille ⭐ ; durée au TDC du lancement)", "",
-             " Nb | Taille ⭐ |  Total | Pertes | cm²/perte | cm²/heure",
-             "----+----------+--------+--------+-----------+----------"]
-    for o in options:
-        mark = ("🛡" if o is safe else "") + ("🚀" if o is fast else "")
-        lines.append(f" {o['hunts']:>2} | {fmt_n(o['size']):>8} | {fmt_n(o['total']):>6} | {round(o['mean']):>6} | "
-                     f"{comma(o['per_loss']):>9} | {fmt_n(round(o['per_hour'])):>8} {mark}")
-    lines += ["🛡 moins de pertes par cm²  🚀 plus de cm² par heure", "```"]
-    return "\n".join(lines), safe["hunts"], fast["hunts"]
+        if next((r[0] for r in rows if "⭐" in r[5]), 0) >= floor:
+            return hunts
+    return 1
 
 
 def table(army, armes, bouclier, tdc, n=5000, rep=10, hunts=1):
@@ -568,15 +532,16 @@ def answer(text, fiche=None):
         if (hunts or 1) > 1:
             note += "ℹ️ `perte` : calcul pour 1 seule chasse.\n"
         return note + loss_table(army, armes, bouclier, tdc, cap)
-    if hunts is None and vc:                             # VC connue : on compare 1 à VC + 1 chasses
-        options = compare_hunts(army, armes, bouclier, tdc, vc, rep)
-        if options:
-            text, safe, fast = comparison(options, vc)
-            parts = [note + text, "🛡 **Moins de pertes**\n" + table(army, armes, bouclier, tdc, rep=rep, hunts=safe)]
-            if fast != safe:
-                parts.append("🚀 **Plus rapide**\n" + table(army, armes, bouclier, tdc, rep=rep, hunts=fast))
-            return "\n".join(parts)
-    return note + table(army, armes, bouclier, tdc, rep=rep, hunts=hunts or 1)
+    if hunts is None:
+        hunts = best_hunts(army, armes, bouclier, tdc, vc + 1, rep) if vc else 1
+        floor = fmt_n(round(tdc * MIN_HUNT_SHARE / 100))
+        if vc and hunts == 1:
+            note += (f"🔀 1 seule chasse (VC {vc} : jusqu'à {vc + 1} possibles). À 2 chasses ou plus, chaque chasse "
+                     f"ferait moins de {MIN_HUNT_SHARE} % de ton TDC ({floor} cm²) : pas rentable.\n")
+        elif vc:
+            note += (f"🔀 {hunts} chasses en même temps (VC {vc} : jusqu'à {vc + 1} possibles), chacune d'au moins "
+                     f"{MIN_HUNT_SHARE} % de ton TDC ({floor} cm²). `1 chasse` pour une seule.\n")
+    return note + table(army, armes, bouclier, tdc, rep=rep, hunts=hunts)
 
 
 def replique(text):

@@ -107,41 +107,15 @@ async def on_message(message: discord.Message):
         asyncio.create_task(enregistrer(message.author, {"armee": army}))     # la dernière armée donnée fait foi
         await niveau_armes.ask_in_channel(message, army, armes_emojis, silent)
         return
-    fiche = fiches_db.get(message.author.id)
     asyncio.create_task(enregistrer_chasse(message))
-    vc = risque.compare_vc(message.content, fiche)
-    if vc:                                                     # comparaison de 1 à VC + 1 chasses : environ 1 minute
-        await message.reply(f"⏳ Je compare 1 à {vc + 1} chasses en même temps : environ 1 minute.",
-                            mention_author=False, silent=True)
     async with message.channel.typing():                       # le calcul prend quelques secondes
         try:
-            reply = await asyncio.to_thread(risque.answer, message.content, fiche)
+            reply = await asyncio.to_thread(risque.answer, message.content, fiches_db.get(message.author.id))
         except Exception:
             logging.exception("calcul impossible pour %r", message.content)
             reply = "❌ Erreur pendant le calcul. Vérifie le texte collé."
     silent = reply == risque.ENORME_TEUB or message.channel.id in SILENT_CHANNEL_IDS   # pas de notification
-    first, *rest = chunks(reply)
-    await message.reply(first, mention_author=False, silent=silent)
-    for part in rest:
-        await message.channel.send(part, silent=silent)
-
-
-def chunks(text: str, limit: int = 2000) -> list[str]:
-    """Texte coupé en messages de `limit` caractères au plus (limite Discord), jamais au milieu d'un bloc ```."""
-    parts, current, block, inside = [], "", "", False
-    for line in text.split("\n"):
-        block += line + "\n"
-        if line.startswith("```"):
-            inside = not inside
-        if inside:
-            continue
-        if current and len(current) + len(block) > limit:
-            parts.append(current.rstrip("\n"))
-            current = ""
-        current += block
-        block = ""
-    current += block
-    return [p for p in parts + [current.rstrip("\n")] if p]
+    await message.reply(reply, mention_author=False, silent=silent)
 
 
 async def enregistrer_chasse(message: discord.Message):
