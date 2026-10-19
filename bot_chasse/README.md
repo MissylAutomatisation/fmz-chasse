@@ -54,7 +54,7 @@ Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Mi
 
 ## `/niveau-joueur` : export CSV des fiches OUAF
 Commande slash, réponse visible de toi seul : un fichier `niveau_joueur.csv` (et son texte, copiable sur mobile).
-- Colonnes : `player_id,pseudo,etable_puceron,champi,ouvriere`, triées par pseudo.
+- Colonnes : `player_id,pseudo,etable_puceron,champi,ouvriere,vc`, triées par pseudo.
 - Lignes : les membres de l'alliance (`ALLIANCE` dans `.env`, OUAF par défaut) d'après l'API des exports publics du
   jeu, qui donne le `player_id`, complétés par les fiches de la base (pseudo comparé sans la casse). Valeur absente = 0.
 - Une fiche dont le pseudo n'est pas dans l'API garde un `player_id` vide. Si l'API est injoignable,

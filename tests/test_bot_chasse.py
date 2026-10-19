@@ -572,15 +572,16 @@ def test_export_niveau_joueur():
                {"id": 412, "pseudo": "Krokmou", "alliance": "OUAF"},
                {"id": 434, "pseudo": "Bull", "alliance": "OUAF"},
                {"id": 7, "pseudo": "Autre", "alliance": "LCN"}]
-    fiches = [{"ID In Game": "Sirius", "Ouvrières": "100\u202f191", "Champignonnière": "16", "Étable à pucerons": "4"},
+    fiches = [{"ID In Game": "Sirius", "Ouvrières": "100\u202f191", "Champignonnière": "16", "Étable à pucerons": "4",
+               "VC": 3},
               {"ID In Game": "krokmou", "Ouvrières": "55 000", "Champignonnière": "12", "Étable à pucerons": ""},
               {"ID In Game": "Inconnu", "Ouvrières": "", "Champignonnière": "3", "Étable à pucerons": "1"},
               {"ID In Game": "", "Ouvrières": "9"}]
     lignes = profil.lignes_export(fiches, joueurs, "OUAF")
-    assert lignes == [[434, "Bull", 0, 0, 0], ["", "Inconnu", 1, 3, 0],
-                      [412, "Krokmou", 0, 12, 55000], [426, "Sirius", 4, 16, 100191]]
-    assert profil.texte_csv(lignes).splitlines()[:2] == ["player_id,pseudo,etable_puceron,champi,ouvriere",
-                                                          "434,Bull,0,0,0"]
+    assert lignes == [[434, "Bull", 0, 0, 0, 0], ["", "Inconnu", 1, 3, 0, 0],
+                      [412, "Krokmou", 0, 12, 55000, 0], [426, "Sirius", 4, 16, 100191, 3]]
+    assert profil.texte_csv(lignes).splitlines()[:2] == ["player_id,pseudo,etable_puceron,champi,ouvriere,vc",
+                                                          "434,Bull,0,0,0,0"]
 
 
 def test_export_sans_api():
@@ -590,7 +591,7 @@ def test_export_sans_api():
         texte, ok = profil.export([{"Nom Discord": "x", "ID In Game": "Sirius", "Champignonnière": 16}], "OUAF")
     finally:
         profil.joueurs_api = ancien
-    assert not ok and texte.splitlines()[1] == ",Sirius,0,16,0"
+    assert not ok and texte.splitlines()[1] == ",Sirius,0,16,0,0"
 
 
 import renta_puceron as rp  # noqa: E402

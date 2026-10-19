@@ -39,10 +39,10 @@ fiches_db = fiches.Fiches()
 ALLIANCE = os.getenv("ALLIANCE", "OUAF")
 
 
-@tree.command(name="niveau-joueur", description="Export CSV des fiches OUAF : étable, champi, ouvrières")
+@tree.command(name="niveau-joueur", description="Export CSV des fiches OUAF : étable, champi, ouvrières, VC")
 async def niveau_joueur(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    lignes = [{profil.LABELS[f]: fiche[f] for f in ("pseudo", "ov", "champi", "puceron") if fiche[f] is not None}
+    lignes = [{profil.LABELS[f]: fiche[f] for f in ("pseudo", "ov", "champi", "puceron", "vc") if fiche[f] is not None}
               for fiche in fiches_db.all()]
     texte, avec_ids = await asyncio.to_thread(profil.export, lignes, ALLIANCE)
     note = "" if avec_ids else "\n⚠️ API du jeu injoignable : player_id vides, membres sans fiche manquants."

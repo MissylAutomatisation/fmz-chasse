@@ -195,7 +195,7 @@ def from_env() -> ProfilSheet | None:
 
 
 # --- Export CSV (/niveau-joueur) ---
-EXPORT_HEADER = ["player_id", "pseudo", "etable_puceron", "champi", "ouvriere"]
+EXPORT_HEADER = ["player_id", "pseudo", "etable_puceron", "champi", "ouvriere", "vc"]
 API_JOUEURS = "https://s5.fourmizzz.fr/api/exports/players/"
 
 
@@ -220,16 +220,16 @@ def lignes_export(fiches: list[dict], joueurs: list[dict], alliance: str) -> lis
     Un membre sans fiche a 0 partout ; une fiche dont le pseudo n'est pas dans l'API garde un player_id vide.
     Triées par pseudo."""
     par_pseudo = {j["pseudo"].lower(): j for j in joueurs}
-    lignes = {j["pseudo"].lower(): [j["id"], j["pseudo"], 0, 0, 0] for j in joueurs if j["alliance"] == alliance}
+    lignes = {j["pseudo"].lower(): [j["id"], j["pseudo"], 0, 0, 0, 0] for j in joueurs if j["alliance"] == alliance}
     for fiche in fiches:
         pseudo = str(fiche.get(LABELS["pseudo"], "")).strip()
         if not pseudo:
             continue
         joueur = par_pseudo.get(pseudo.lower())
         ligne = lignes.setdefault(pseudo.lower(), [joueur["id"] if joueur else "", joueur["pseudo"] if joueur else pseudo,
-                                                   0, 0, 0])
+                                                   0, 0, 0, 0])
         ligne[2:] = [entier(fiche.get(LABELS["puceron"])), entier(fiche.get(LABELS["champi"])),
-                     entier(fiche.get(LABELS["ov"]))]
+                     entier(fiche.get(LABELS["ov"])), entier(fiche.get(LABELS["vc"]))]
     return sorted(lignes.values(), key=lambda ligne: str(ligne[1]).lower())
 
 
