@@ -119,8 +119,8 @@ async def on_message(message: discord.Message):
 
 
 async def enregistrer_chasse(message: discord.Message):
-    """Armée, Armes, Bouclier, VC et VA donnés dans le salon chasse remplacent ceux de la fiche (le TDC et le nombre de
-    chasses ne sont jamais gardés)."""
+    """Armée, Armes, Bouclier, VC et VA donnés dans le salon chasse remplacent ceux de la fiche (le TDC n'est jamais
+    gardé)."""
     try:
         found = risque.read(message.content)
     except risque.ParseError:

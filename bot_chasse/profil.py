@@ -86,8 +86,7 @@ def is_value_word(word: str) -> bool:
 
 def parse_values(text: str) -> dict:
     """Armée, Armes, Bouclier, VC et VA (lus comme dans le salon chasse), puis ouvrières, Champignonnière, Étable."""
-    vc, _, text = risque.counts(text)
-    va, text = risque.va_of(text)
+    vc, va, text = risque.speeds(text)
     army, armes, bouclier, _ = risque.parse_partial(text)
     found = {k: v for k, v in (("armes", armes), ("bouclier", bouclier), ("armee", army), ("vc", vc), ("va", va))
              if v is not None}

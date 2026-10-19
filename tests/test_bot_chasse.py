@@ -693,7 +693,7 @@ def test_fiches_importees_depuis_le_sheet():
 
 def test_chasse_avec_la_fiche(monkeypatch):
     vu = {}
-    monkeypatch.setattr(risque, "table", lambda army, armes, bouclier, tdc, rep=10, hunts=1: vu.update(
+    monkeypatch.setattr(risque, "table", lambda army, armes, bouclier, tdc, rep=10: vu.update(
         army=army, armes=armes, bouclier=bouclier, tdc=tdc) or "TABLEAU")
     fiche = {"armee": {"jsn": 1425, "sn": 359}, "armee_maj": "19/10/2026 14:02", "armes": 8, "bouclier": 7}
     assert risque.answer("TDC 2 770", fiche) == ("📋 Pris dans ta fiche : armée du 19/10/2026 14:02, Armes, Bouclier\n"
@@ -710,81 +710,9 @@ def test_chasse_avec_la_fiche(monkeypatch):
 
 def test_lecture_partielle():
     assert risque.parse_partial("TDC 2 770") == (None, None, None, 2770)
-    assert risque.read("500 JSN, armes 3, réplique 30") == {"rep": 30, "cap": None, "vc": None, "va": None, "hunts": None,
+    assert risque.read("500 JSN, armes 3, réplique 30") == {"rep": 30, "cap": None, "vc": None, "va": None,
                                                             "army": {"jsn": 500}, "armes": 3, "bouclier": None,
                                                             "tdc": None}
-
-
-# --- Multi-chasses (chasses simultanées, comme le simulateur Calystène) ---
-@pytest.mark.parametrize("text, vc, hunts", [
-    ("TDC 2 770 3 chasses", None, 3), ("chasses 3, TDC 2770", None, 3), ("vc 2, TDC 2770", 2, None),
-    ("Vitesse de chasse 2 TDC 2770", 2, None), ("Terrain de chasse 2770", None, None), ("multi-chasse 4", None, 4),
-])
-def test_multi_lecture(text, vc, hunts):
-    found = risque.read(text)
-    assert (found["vc"], found["hunts"]) == (vc, hunts)
-    assert found["tdc"] in (2770, None)
-
-
-def test_multi_repartition_selon_la_difficulte():
-    army = {"jsn": 1425, "sn": 359, "js": 5601, "a": 4725}
-    parts = risque.split_army(army, 14674, 600, 3)
-    assert [sum(p[u] for p in parts) for u in army] == list(army.values())               # aucune unité perdue
-    assert sum(parts[0].values()) <= sum(parts[1].values()) <= sum(parts[2].values())    # la dernière est la plus dure
-    assert risque.split_army(army, 14674, 600, 1) == [army]
-
-
-def test_multi_stats_additionnees():
-    army = {"jsn": 2000, "js": 1500}
-    one = [risque.stats(p, 3000 + k * 50, 50, 2, 1, 500, 1 + k) for k, p in
-           enumerate(risque.split_army(army, 3000, 50, 2))]
-    risk, mean, worst, *_ = risque.stats(army, 3000, 50, 2, 1, 500, hunts=2)
-    assert mean == pytest.approx(one[0][1] + one[1][1]) and worst == one[0][2] + one[1][2]
-    assert risk == pytest.approx(100 * (1 - (1 - one[0][0] / 100) * (1 - one[1][0] / 100)))
-    assert risque.stats({"jsn": 1}, 3000, 50, 2, 1, 500, hunts=2)[0] == 100.0             # pas assez d'unités
-
-
-def test_multi_nombre_de_chasses(monkeypatch):
-    vu = {}
-    monkeypatch.setattr(risque, "table", lambda army, armes, bouclier, tdc, rep=10, hunts=1: vu.update(hunts=hunts)
-                        or "TABLEAU")
-    monkeypatch.setattr(risque, "best_hunts", lambda army, armes, bouclier, tdc, max_hunts, rep=10:
-                        vu.update(max_hunts=max_hunts) or 2)
-    fiche = {"armee": {"jsn": 500}, "vc": 2}
-    reply = risque.answer("TDC 2 770", fiche)
-    assert reply.startswith("📋 Pris dans ta fiche : armée, VC") and "🔀 2 chasses en même temps (VC 2 : jusqu'à 3 possibles)" in reply and "Calystène" not in reply
-    assert (vu["hunts"], vu["max_hunts"]) == (2, 3)                                     # choisi jusqu'à VC + 1
-    risque.answer("TDC 2 770 1 chasse", fiche)
-    assert vu["hunts"] == 1                                                              # le message passe avant
-    risque.answer("500 JSN vc 4 TDC 2 770")
-    assert vu["max_hunts"] == 5
-    vu.clear()
-    risque.answer("500 JSN TDC 2 770")
-    assert vu == {"hunts": 1}                                                            # sans VC : 1 chasse, rien à choisir
-    risque.answer("500 JSN vc 0 TDC 2 770")
-    assert vu == {"hunts": 1}
-    assert "entre 1 et 20" in risque.answer("500 JSN TDC 2 770 50 chasses")
-    assert "entre 1 et 20" in risque.answer("500 JSN TDC 2 770 vc 25")
-    assert risque.army_only("500 JSN vc 2") is None
-
-
-def test_multi_choix_comme_calystene(monkeypatch):
-    """Le plus de chasses dont la chasse ⭐ fait au moins 30 % du TDC (1 000 TDC : 300 cm²)."""
-    star = {4: 250, 3: 299, 2: 300}
-    monkeypatch.setattr(risque, "key_rows", lambda army, armes, bouclier, tdc, n, rep, hunts:
-                        [(100, 1, 0, 0, 0, "🛡"), (star[hunts], 9, 0, 0, 0, "⭐")])
-    assert risque.best_hunts({"jsn": 1}, 0, 0, 1000, 4) == 2
-    star[3] = 300
-    assert risque.best_hunts({"jsn": 1}, 0, 0, 1000, 4) == 3
-    star.update({3: 10, 2: 10})
-    assert risque.best_hunts({"jsn": 1}, 0, 0, 1000, 4) == 1
-
-
-def test_multi_tableau(monkeypatch):
-    army = {"jsn": 3000, "js": 2000}
-    text = risque.table(army, 2, 1, 3000, n=300, hunts=3)
-    assert "3 chasses en même temps" in text and "3×" in text and "⭐ Répartition pour 3×" in text
-    assert text.count("\n 1. ") == 1 and "\n 3. " in text
 
 
 def test_profil_vc():
@@ -808,20 +736,12 @@ def test_profil_mot_cle_jamais_pris_pour_pseudo(text, expected):
     assert profil.parse(text) == expected
 
 
-def test_multi_message_une_seule_chasse(monkeypatch):
-    monkeypatch.setattr(risque, "table", lambda *a, **k: "TABLEAU")
-    monkeypatch.setattr(risque, "best_hunts", lambda *a, **k: 1)
-    reply = risque.answer("500 JSN vc 6 TDC 21 374")
-    assert reply.startswith("🔀 1 seule chasse (VC 6 : jusqu'à 7 possibles). À 2 chasses ou plus, chaque chasse ferait "
-                            "moins de 30 % de ton TDC (6 412 cm²)")
-
-
 @pytest.mark.parametrize("text, va", [
     ("va 5", 5), ("VA 5", 5), ("Vitesse d'attaque 5", 5), ("vitesse d’attaque 5", 5), ("ça va", None),
     ("5 va", None),
 ])
 def test_va_lecture(text, va):
-    assert risque.va_of(text)[0] == va
+    assert risque.speeds(text)[1] == va
 
 
 def test_va_fiche():
@@ -829,7 +749,6 @@ def test_va_fiche():
     assert profil.parse("VA 5") == {"va": 5}                                             # pas un pseudo
     assert risque.read("TDC 2 770 va 5")["va"] == 5 and risque.read("TDC 2 770 va 5")["tdc"] == 2770
     assert risque.army_only("500 JSN va 5") is None
-    assert risque.read("TDC 2770 ça va 3 chasses")["va"] is None                       # « 3 chasses » lu avant
     db = fiches.Fiches(":memory:")
     db.save(1, "x", {"va": 5})
     assert db.get(1)["va"] == 5
@@ -847,3 +766,12 @@ def test_base_ancienne_completee(tmp_path):
     db = fiches.Fiches(path)
     db.save(1, "x", {"vc": 2, "va": 4})
     assert (db.get(1)["vc"], db.get(1)["va"]) == (2, 4)
+
+
+def test_vc_gardee_mais_une_seule_chasse(monkeypatch):
+    vu = []
+    monkeypatch.setattr(risque, "table", lambda *a, **k: vu.append((a, k)) or "TABLEAU")
+    assert risque.answer("500 JSN vc 3 va 5 TDC 2 770", {"vc": 6}) == "TABLEAU"
+    assert vu == [(({"jsn": 500}, 0, 0, 2770), {"rep": 10})]                           # calcul normal, 1 chasse
+    found = risque.read("500 JSN vc 3 va 5 TDC 2 770")
+    assert (found["vc"], found["va"], found["tdc"]) == (3, 5, 2770)

@@ -5,7 +5,6 @@ Moteur : hunt_mc.py (tirages de prédateurs réalistes, repris de fourmizzz-zero
 1,5 fois). Par défaut 10 % ; « réplique 30 » ou « réplique 50 » dans le message change le seuil compté.
 """
 import itertools
-import math
 import logging
 import os
 import random
@@ -45,12 +44,9 @@ BUCKETS = 4                                          # tranches égales de 0 à 
 REPLIQUES = {10: 3, 30: 2, 50: 1.5}                  # réplique comptée (%) -> l'attaque doit dépasser ce multiple de la vie
 REPLIQUE_WORDS = r"r[ée]pli(?:que)?s?\s*[:=]?\s*(\d+)\s*%?"   # « réplique 30 », « Replique: 50 % », « répli 30 »
 PERTE_WORDS = r"pertes?(?:\s+max(?:imum|imales?|i)?)?"      # « perte 100 », « pertes max 100 », « 100 pertes »
-VC_WORDS = r"vc|vitesses?\s+de\s+chasses?"           # « vc 2 », « Vitesse de chasse 2 » : VC + 1 chasses simultanées
-VA_WORDS = r"va|vitesses?\s+d\W?\s*attaques?"         # « va 5 », « Vitesse d'attaque 5 » : gardée dans la fiche seulement
-HUNTS_WORDS = r"(?<!de )chasses?|multi[\s-]?chasses?"   # « 3 chasses », « chasses 3 » ; pas « terrain de chasse »
-MAX_HUNTS = 20
-MIN_HUNT_SHARE = 30                                  # taille mini d'une chasse en multi : 30 % du TDC (Calystène)
-CHOICE_DRAWS = 1000                                  # tirages pour choisir le nombre de chasses (le tableau en garde 5 000)
+# Vitesses de chasse et d'attaque : gardées dans la fiche, pas utilisées dans le calcul
+VC_WORDS = r"vc|vitesses?\s+de\s+chasses?"           # « vc 2 », « Vitesse de chasse 2 »
+VA_WORDS = r"va|vitesses?\s+d\W?\s*attaques?"         # « va 5 », « Vitesse d'attaque 5 »
 
 
 class ParseError(ValueError):
@@ -112,29 +108,23 @@ def parse(text, need_tdc=True):
     return army, armes or 0, bouclier or 0, tdc
 
 
-def counts(text):
-    """(VC, nombre de chasses, texte sans eux) ; None pour ce qui manque. La VC est lue avant « chasses » (« vitesse de
-    chasse 2 » n'est pas « 2 chasses »)."""
+def speeds(text):
+    """(VC, VA, texte sans elles) ; None pour ce qui manque. Seulement « vc 2 » / « va 5 » (mot puis nombre) : « va »
+    est aussi un mot courant."""
     rest = " " + text.replace("\n", " ; ") + " "
-    vc, rest = take(rest, VC_WORDS, r"\d{1,2}(?!\d)", after_first=True)
-    hunts, rest = take(rest, HUNTS_WORDS, r"\d{1,2}(?!\d)", after_first=False)
-    return vc[0] if vc else None, hunts[0] if hunts else None, rest
-
-
-def va_of(text):
-    """(VA, texte sans elle) ; None si absente. Seulement « va 5 » (mot puis nombre) : « va » est aussi un mot courant."""
-    va, rest = take(" " + text.replace("\n", " ; ") + " ", VA_WORDS, r"\d{1,2}(?!\d)", after_first=True, both=False)
-    return va[0] if va else None, rest
+    vc, rest = take(rest, VC_WORDS, r"\d{1,2}(?!\d)", after_first=True, both=False)
+    va, rest = take(rest, VA_WORDS, r"\d{1,2}(?!\d)", after_first=True, both=False)
+    return vc[0] if vc else None, va[0] if va else None, rest
 
 
 def army_only(text):
-    """Armée seule, sans Armes, Bouclier, TDC, perte ni réplique -> {unité: n} ; None sinon."""
+    """Armée seule, sans Armes, Bouclier, TDC, VC, VA, perte ni réplique -> {unité: n} ; None sinon."""
     if re.search(REPLIQUE_WORDS, text, re.I):
         return None
-    rest = " " + text.replace("\n", " ; ") + " "
-    if va_of(text)[0] is not None:
+    vc, va, rest = speeds(text)
+    if vc is not None or va is not None:
         return None
-    for word in [VC_WORDS, HUNTS_WORDS] + [w for w, _ in LEVEL_WORDS] + [TDC_WORDS, PERTE_WORDS]:
+    for word in [w for w, _ in LEVEL_WORDS] + [TDC_WORDS, PERTE_WORDS]:
         found, rest = take(rest, word, NUM, after_first=True)
         if found:
             return None
@@ -147,36 +137,12 @@ def army_only(text):
 _STATS = {}
 
 
-def split_army(army, tdc, size, hunts):
-    """Armée répartie entre `hunts` chasses simultanées de `size` cm², comme le simulateur Calystène : la chasse n° k
-    part d'un TDC = tdc + k × size (les chasses en cours comptent) et reçoit une part de chaque unité proportionnelle
-    à sa difficulté. On répartit de la dernière à la première ; la première prend le reste."""
-    diff = [hunt_mc.food_target(tdc + k * size, size) for k in range(hunts)]
-    left, parts = dict(army), [None] * hunts
-    for k in reversed(range(hunts)):
-        share = diff[k] / sum(diff[:k + 1])
-        parts[k] = {u: left[u] if k == 0 else round(left[u] * share) for u in left}
-        left = {u: left[u] - parts[k][u] for u in left}
-    return [{u: c for u, c in p.items() if c} for p in parts]
-
-
-def stats(army, tdc, size, armes, bouclier, n, seed=1, rep=10, hunts=1):
+def stats(army, tdc, size, armes, bouclier, n, seed=1, rep=10):
     """(risque de réplique > rep % en %, pertes moyennes, pire cas, {pertes: nb de fois}, {unité: pertes} du pire
     combat) sur n tirages, mis en cache.
 
     Mêmes tirages pour toutes les tailles et tous les TDC (graine fixe) : les courbes sont lisses, les recherches
-    dichotomiques ne sautent plus d'une taille à l'autre à cause du hasard.
-
-    hunts > 1 : `hunts` chasses simultanées de `size` cm² chacune (armée répartie par split_army, tirages différents
-    par chasse). Risque = au moins une chasse au-dessus de la réplique ; pertes moyennes et pire cas additionnés (le
-    pire cas est donc un majorant) ; pas de détail des pertes (None, None)."""
-    if hunts > 1:
-        parts = split_army(army, tdc, size, hunts)
-        if not all(parts):                                      # pas assez d'unités pour toutes les chasses
-            return 100.0, float(sum(army.values())), sum(army.values()), None, None
-        res = [stats(p, tdc + k * size, size, armes, bouclier, n, seed + k, rep) for k, p in enumerate(parts)]
-        safe = math.prod(1 - r[0] / 100 for r in res)
-        return 100 * (1 - safe), sum(r[1] for r in res), sum(r[2] for r in res), None, None
+    dichotomiques ne sautent plus d'une taille à l'autre à cause du hasard."""
     key = (tuple(army.items()), tdc, size, armes, bouclier, n, seed)
     if key not in _STATS:
         if len(_STATS) > 20000:
@@ -290,9 +256,9 @@ def upper_size(ok):
     return hi
 
 
-def sizes(army, tdc, armes, bouclier, n=5000, rep=10, hunts=1):
+def sizes(army, tdc, armes, bouclier, n=5000, rep=10):
     """Tailles de chasse pour chaque niveau de risque de TARGETS (sans doublon, croissantes)."""
-    risk = lambda size: stats(army, tdc, size, armes, bouclier, n, rep=rep, hunts=hunts)[0]
+    risk = lambda size: stats(army, tdc, size, armes, bouclier, n, rep=rep)[0]
     found = [largest_size(risk, t, upper_size(lambda s: risk(s) <= TARGETS[-1])) for t in TARGETS]
     return sorted({s for s in found if s > 0})
 
@@ -318,7 +284,7 @@ def comma(x):
     return f"{x:.1f}".replace(".", ",")
 
 
-def star_sizes(army, tdc, armes, bouclier, rows, n=5000, hunts=1):         # même n que le tableau : chiffres identiques
+def star_sizes(army, tdc, armes, bouclier, rows, n=5000):         # même n que le tableau : chiffres identiques
     """{taille: symbole} : pour chaque seuil de STARS, la plus grosse chasse qui garde ce % du meilleur cm²/perte.
 
     Le rendement ne baisse pas régulièrement : il remonte par endroits (paliers de réplique 10/30/50 %). On balaie donc
@@ -329,8 +295,8 @@ def star_sizes(army, tdc, armes, bouclier, rows, n=5000, hunts=1):         # mê
     total = sum(army.values())
 
     def per_loss(s):
-        _, mean, worst, *_ = stats(army, tdc, s, armes, bouclier, n, hunts=hunts)
-        return 0 if worst >= total else s * hunts / mean if mean else float("inf")
+        _, mean, worst, *_ = stats(army, tdc, s, armes, bouclier, n)
+        return 0 if worst >= total else s / mean if mean else float("inf")
     limits = [keep * best for keep, _ in STARS]
     step = max(1, best_size // 40)
     last = [best_size] * len(STARS)                   # plus grosse taille vue au-dessus de chaque seuil
@@ -357,22 +323,22 @@ def best_ratio_size(marks, ratio):
     return max(range(max(lo, best - step + 1), min(hi, best + step - 1) + 1), key=key)
 
 
-def key_rows(army, armes, bouclier, tdc, n=5000, rep=10, hunts=1):
+def key_rows(army, armes, bouclier, tdc, n=5000, rep=10):
     """Les lignes utiles [(taille, risque, pertes moy., pire cas, cm²/perte, symboles)] : 🛡 plus grosse chasse à
     1 % de risque, 📈 meilleur cm²/perte, ⭐ opti, 🔥 flemme. Une taille qui a plusieurs rôles cumule les symboles.
     Le risque est celui de dépasser la réplique rep % : avec 30, les lignes étudiées sont plus grosses. 📈 ne dépend
     pas de rep (repères à 10 %) ; ⭐ et 🔥 se comparent au meilleur cm²/perte des lignes de rep."""
     def row(s):
-        risk, mean, worst, *_ = stats(army, tdc, s, armes, bouclier, n, rep=rep, hunts=hunts)
-        return s, risk, mean, worst, s * hunts / mean if mean else float("inf")             # cm² par JSN perdue
-    rows = [row(s) for s in sizes(army, tdc, armes, bouclier, n, rep, hunts)]
+        risk, mean, worst, *_ = stats(army, tdc, s, armes, bouclier, n, rep=rep)
+        return s, risk, mean, worst, s / mean if mean else float("inf")             # cm² par JSN perdue
+    rows = [row(s) for s in sizes(army, tdc, armes, bouclier, n, rep)]
     if not rows:
         return []
-    base = [r[0] for r in rows] if rep == 10 else sizes(army, tdc, armes, bouclier, n, 10, hunts) or [r[0] for r in rows]
+    base = [r[0] for r in rows] if rep == 10 else sizes(army, tdc, armes, bouclier, n, 10) or [r[0] for r in rows]
     top = best_ratio_size(base, lambda s: row(s)[4])
     if rep == 10 and top not in [r[0] for r in rows]:
         rows = sorted(rows + [row(top)])
-    marks = star_sizes(army, tdc, armes, bouclier, rows, n, hunts)
+    marks = star_sizes(army, tdc, armes, bouclier, rows, n)
     roles = {}
     for s, symbol in [(rows[0][0], "🛡"), (top, "📈")] + [(s, m) for s, m in marks.items()]:
         roles[s] = roles.get(s, "") + symbol
@@ -386,45 +352,22 @@ def fdf(army, armes):
     return round(sum(hunt_mc.UNITS[u][1] * k for u, k in army.items()) * (1 + 0.1 * armes))
 
 
-def best_hunts(army, armes, bouclier, tdc, max_hunts, rep=10, n=CHOICE_DRAWS):
-    """Nombre de chasses simultanées, comme le mode auto de Calystène : le plus grand nombre (≤ max_hunts) dont la
-    chasse ⭐ fait au moins MIN_HUNT_SHARE % du TDC ; 1 sinon."""
-    floor = round(tdc * MIN_HUNT_SHARE / 100)
-    for hunts in range(max_hunts, 1, -1):
-        rows = key_rows(army, armes, bouclier, tdc, n, rep, hunts)
-        if next((r[0] for r in rows if "⭐" in r[5]), 0) >= floor:
-            return hunts
-    return 1
-
-
-def table(army, armes, bouclier, tdc, n=5000, rep=10, hunts=1):
-    """Le message prêt à coller sur Discord (avec les ```), étroit pour le téléphone : les lignes utiles.
-
-    hunts > 1 : tailles par chasse (« 3×120 cm² »), risque = au moins une chasse, pertes = total des chasses, puis la
-    répartition de l'armée pour la taille ⭐."""
-    rows = key_rows(army, armes, bouclier, tdc, n, rep, hunts)
+def table(army, armes, bouclier, tdc, n=5000, rep=10):
+    """Le message prêt à coller sur Discord (avec les ```), étroit pour le téléphone : les lignes utiles."""
+    rows = key_rows(army, armes, bouclier, tdc, n, rep)
     if not rows:
         return "```\n🎯 Aucune chasse possible : armée trop faible pour ce TDC.\n```"
-    multi = f"{hunts}×" if hunts > 1 else ""
-    lines = ["```", "🎯 Chasses conseillées" + (f" : {hunts} chasses en même temps" if hunts > 1 else "")
-             + (f" (réplique {rep} %)" if rep != 10 else ""),
+    lines = ["```", "🎯 Chasses conseillées" + (f" (réplique {rep} %)" if rep != 10 else ""),
              f"   ({army_text(army)}, Armes {armes}, Bouclier {bouclier}, TDC {fmt_n(tdc)})",
-             f"   (FDF : {fmt_n(fdf(army, armes))})", ""]
-    if hunts > 1:
-        lines[-1:-1] = [f"   (risque : au moins 1 chasse ; pertes : total des {hunts})"]
-    width = max(7, max(len(f"{multi}{r[0]} cm²") for r in rows))
-    lines += [f" {'Chasse':<{width}} | Réplique > {rep} % | Pertes moy. | cm²/perte | Pire cas",
-              "-" * (width + 2) + "+-----------------+-------------+-----------+---------"]
+             f"   (FDF : {fmt_n(fdf(army, armes))})", "",
+             f" Chasse  | Réplique > {rep} % | Pertes moy. | cm²/perte | Pire cas",
+             "---------+-----------------+-------------+-----------+---------"]
     for s, risk, mean, worst, per_loss, roles in rows:
-        lines.append(f" {f'{multi}{s} cm²':<{width}} | {fmt_pct(risk):<15} | {comma(mean):<11} | "
+        lines.append(f" {f'{s} cm²':<7} | {fmt_pct(risk):<15} | {comma(mean):<11} | "
                      f"{comma(per_loss) if mean else 'sans perte':<9} | {str(worst):<8} {roles}")
     lines += ["🛡 min. pertes  📈 meilleur cm²/perte",
               f"⭐ opti ({round(STARS[0][0] * 100)} % du meilleur{f' en réplique {rep} %' if rep != 10 else ''})  "
               f"🔥 flemme ({round(STARS[1][0] * 100)} %)"]
-    if hunts > 1:
-        star = next(r[0] for r in rows if "⭐" in r[5])
-        lines += ["", f"⭐ Répartition pour {hunts}×{star} cm² (dans l'ordre de lancement) :"]
-        lines += [f" {k + 1}. {army_text(part)}" for k, part in enumerate(split_army(army, tdc, star, hunts))]
     return "\n".join(lines + ["```"])
 
 
@@ -490,23 +433,21 @@ ENORME_TEUB = r"""```
 
 
 def read(text):
-    """{"rep", "cap", "vc", "va", "hunts", "army", "armes", "bouclier", "tdc"} du message ; None pour ce qui manque
-    (rep vaut 10 par défaut)."""
+    """{"rep", "cap", "vc", "va", "army", "armes", "bouclier", "tdc"} du message ; None pour ce qui manque (rep vaut
+    10 par défaut)."""
     rep, text = replique(text)
     cap, text = perte(text)
-    vc, hunts, text = counts(text)
-    va, text = va_of(text)
+    vc, va, text = speeds(text)
     army, armes, bouclier, tdc = parse_partial(text)
-    return {"rep": rep, "cap": cap, "vc": vc, "va": va, "hunts": hunts, "army": army, "armes": armes,
-            "bouclier": bouclier, "tdc": tdc}
+    return {"rep": rep, "cap": cap, "vc": vc, "va": va, "army": army, "armes": armes, "bouclier": bouclier,
+            "tdc": tdc}
 
 
 def answer(text, fiche=None):
     """Réponse du bot à un texte collé (tableau, ou message d'erreur).
 
-    Ce qui manque dans le message (armée, Armes, Bouclier, VC) est pris dans la fiche du joueur {"armee",
-    "armee_maj", "armes", "bouclier", "vc"} ; ce qui est dans le message passe avant la fiche. Nombre de chasses :
-    « 3 chasses » dans le message, sinon VC + 1, sinon 1."""
+    Ce qui manque dans le message (armée, Armes, Bouclier) est pris dans la fiche du joueur {"armee", "armee_maj",
+    "armes", "bouclier"} ; ce qui est dans le message passe avant la fiche."""
     if re.search(r"[ée]norme\s+teub", text, re.IGNORECASE):     # easter egg
         return ENORME_TEUB
     fiche = fiche or {}
@@ -522,13 +463,6 @@ def answer(text, fiche=None):
                 from_fiche.append(name)
         armes = fiche.get("armes") or 0 if armes is None else armes
         bouclier = fiche.get("bouclier") or 0 if bouclier is None else bouclier
-        vc = found["vc"]
-        if vc is None and found["hunts"] is None and fiche.get("vc") is not None:
-            vc = fiche["vc"]
-            from_fiche.append("VC")
-        hunts = found["hunts"]                           # « 3 chasses » : imposé ; sinon choisi selon la VC, plus bas
-        if not 1 <= (hunts or (vc or 0) + 1) <= MAX_HUNTS:
-            raise ParseError(f"Nombre de chasses entre 1 et {MAX_HUNTS}.")
         if not army:
             raise ParseError(NO_UNIT + "\nOu enregistre ton armée dans le salon profil, puis écris juste `TDC 2 770`.")
         if tdc is None:
@@ -538,20 +472,9 @@ def answer(text, fiche=None):
             e = f"{e}\nSi « pertes » suit le TDC, mets une virgule avant ou écris `perte 100`."
         return f"❌ {e}\nExemple : `1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770` (+ `réplique 30` ou `perte 100` si besoin)"
     note = f"📋 Pris dans ta fiche : {', '.join(from_fiche)}\n" if from_fiche else ""
-    if cap is not None:                                  # « perte XXX » : une seule chasse
-        if (hunts or 1) > 1:
-            note += "ℹ️ `perte` : calcul pour 1 seule chasse.\n"
+    if cap is not None:
         return note + loss_table(army, armes, bouclier, tdc, cap)
-    if hunts is None:
-        hunts = best_hunts(army, armes, bouclier, tdc, vc + 1, rep) if vc else 1
-        floor = fmt_n(round(tdc * MIN_HUNT_SHARE / 100))
-        if vc and hunts == 1:
-            note += (f"🔀 1 seule chasse (VC {vc} : jusqu'à {vc + 1} possibles). À 2 chasses ou plus, chaque chasse "
-                     f"ferait moins de {MIN_HUNT_SHARE} % de ton TDC ({floor} cm²) : pas rentable.\n")
-        elif vc:
-            note += (f"🔀 {hunts} chasses en même temps (VC {vc} : jusqu'à {vc + 1} possibles), chacune d'au moins "
-                     f"{MIN_HUNT_SHARE} % de ton TDC ({floor} cm²). `1 chasse` pour une seule.\n")
-    return note + table(army, armes, bouclier, tdc, rep=rep, hunts=hunts)
+    return note + table(army, armes, bouclier, tdc, rep=rep)
 
 
 def replique(text):
