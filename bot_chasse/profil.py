@@ -8,13 +8,13 @@ from zoneinfo import ZoneInfo
 
 import risque
 
-FIELDS = ("pseudo", "ov", "champi", "puceron", "armes", "bouclier", "armee", "vc")
+FIELDS = ("pseudo", "ov", "champi", "puceron", "armes", "bouclier", "armee", "vc", "va")
 LABELS = {"pseudo": "ID In Game", "ov": "Ouvrières", "champi": "Champignonnière", "puceron": "Étable à pucerons",
-          "armes": "Armes", "bouclier": "Bouclier", "armee": "Armée", "vc": "VC"}
+          "armes": "Armes", "bouclier": "Bouclier", "armee": "Armée", "vc": "VC", "va": "VA"}
 NOM_DISCORD, ID_DISCORD, DATE = "Nom Discord", "ID Discord", "Mis à jour"
 # Ordre d'un sheet neuf ; ensuite chaque colonne est retrouvée par son titre, où qu'elle soit.
 HEADER = [NOM_DISCORD, LABELS["pseudo"], ID_DISCORD, LABELS["ov"], LABELS["champi"], LABELS["puceron"], DATE,
-          LABELS["armes"], LABELS["bouclier"], LABELS["armee"], LABELS["vc"]]
+          LABELS["armes"], LABELS["bouclier"], LABELS["armee"], LABELS["vc"], LABELS["va"]]
 
 # Pseudo en jeu : un mot (lettres, chiffres, _ - .), casse gardée ; lu avant les nombres puis retiré du texte.
 PSEUDO = re.compile(r"\b(?:pseudo|id\s*(?:in\s*game|ig|jeu)|in\s*game|ingame|ig)\b\s*[:=]?\s*(?P<pseudo>[\w.\-]+)",
@@ -80,15 +80,17 @@ def is_value_word(word: str) -> bool:
     if re.fullmatch(KEYWORD, normalize(word)):
         return True
     words = ([(w, False) for w, _ in risque.LEVEL_WORDS] + [(w, case) for w, _, case in risque.UNIT_WORDS]
-             + [(risque.VC_WORDS, False), (r"vitesses?", False)])
+             + [(risque.VC_WORDS, False), (risque.VA_WORDS, False), (r"vitesses?", False)])
     return any(re.fullmatch(w, word, 0 if case else re.I) for w, case in words)
 
 
 def parse_values(text: str) -> dict:
-    """Armée, Armes, Bouclier et VC (lus comme dans le salon chasse), puis ouvrières, Champignonnière, Étable."""
+    """Armée, Armes, Bouclier, VC et VA (lus comme dans le salon chasse), puis ouvrières, Champignonnière, Étable."""
     vc, _, text = risque.counts(text)
+    va, text = risque.va_of(text)
     army, armes, bouclier, _ = risque.parse_partial(text)
-    found = {k: v for k, v in (("armes", armes), ("bouclier", bouclier), ("armee", army), ("vc", vc)) if v is not None}
+    found = {k: v for k, v in (("armes", armes), ("bouclier", bouclier), ("armee", army), ("vc", vc), ("va", va))
+             if v is not None}
     return {**parse_numbers(text), **found}
 
 
@@ -195,7 +197,7 @@ def from_env() -> ProfilSheet | None:
 
 
 # --- Export CSV (/niveau-joueur) ---
-EXPORT_HEADER = ["player_id", "pseudo", "etable_puceron", "champi", "ouvriere", "vc"]
+EXPORT_HEADER = ["player_id", "pseudo", "etable_puceron", "champi", "ouvriere", "vc", "va"]
 API_JOUEURS = "https://s5.fourmizzz.fr/api/exports/players/"
 
 
@@ -220,16 +222,17 @@ def lignes_export(fiches: list[dict], joueurs: list[dict], alliance: str) -> lis
     Un membre sans fiche a 0 partout ; une fiche dont le pseudo n'est pas dans l'API garde un player_id vide.
     Triées par pseudo."""
     par_pseudo = {j["pseudo"].lower(): j for j in joueurs}
-    lignes = {j["pseudo"].lower(): [j["id"], j["pseudo"], 0, 0, 0, 0] for j in joueurs if j["alliance"] == alliance}
+    lignes = {j["pseudo"].lower(): [j["id"], j["pseudo"], 0, 0, 0, 0, 0] for j in joueurs if j["alliance"] == alliance}
     for fiche in fiches:
         pseudo = str(fiche.get(LABELS["pseudo"], "")).strip()
         if not pseudo:
             continue
         joueur = par_pseudo.get(pseudo.lower())
         ligne = lignes.setdefault(pseudo.lower(), [joueur["id"] if joueur else "", joueur["pseudo"] if joueur else pseudo,
-                                                   0, 0, 0, 0])
+                                                   0, 0, 0, 0, 0])
         ligne[2:] = [entier(fiche.get(LABELS["puceron"])), entier(fiche.get(LABELS["champi"])),
-                     entier(fiche.get(LABELS["ov"])), entier(fiche.get(LABELS["vc"]))]
+                     entier(fiche.get(LABELS["ov"])), entier(fiche.get(LABELS["vc"])),
+                     entier(fiche.get(LABELS["va"]))]
     return sorted(lignes.values(), key=lambda ligne: str(ligne[1]).lower())
 
 

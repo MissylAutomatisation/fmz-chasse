@@ -46,6 +46,7 @@ REPLIQUES = {10: 3, 30: 2, 50: 1.5}                  # réplique comptée (%) ->
 REPLIQUE_WORDS = r"r[ée]pli(?:que)?s?\s*[:=]?\s*(\d+)\s*%?"   # « réplique 30 », « Replique: 50 % », « répli 30 »
 PERTE_WORDS = r"pertes?(?:\s+max(?:imum|imales?|i)?)?"      # « perte 100 », « pertes max 100 », « 100 pertes »
 VC_WORDS = r"vc|vitesses?\s+de\s+chasses?"           # « vc 2 », « Vitesse de chasse 2 » : VC + 1 chasses simultanées
+VA_WORDS = r"va|vitesses?\s+d\W?\s*attaques?"         # « va 5 », « Vitesse d'attaque 5 » : gardée dans la fiche seulement
 HUNTS_WORDS = r"(?<!de )chasses?|multi[\s-]?chasses?"   # « 3 chasses », « chasses 3 » ; pas « terrain de chasse »
 MAX_HUNTS = 20
 MIN_HUNT_SHARE = 30                                  # taille mini d'une chasse en multi : 30 % du TDC (Calystène)
@@ -120,11 +121,19 @@ def counts(text):
     return vc[0] if vc else None, hunts[0] if hunts else None, rest
 
 
+def va_of(text):
+    """(VA, texte sans elle) ; None si absente. Seulement « va 5 » (mot puis nombre) : « va » est aussi un mot courant."""
+    va, rest = take(" " + text.replace("\n", " ; ") + " ", VA_WORDS, r"\d{1,2}(?!\d)", after_first=True, both=False)
+    return va[0] if va else None, rest
+
+
 def army_only(text):
     """Armée seule, sans Armes, Bouclier, TDC, perte ni réplique -> {unité: n} ; None sinon."""
     if re.search(REPLIQUE_WORDS, text, re.I):
         return None
     rest = " " + text.replace("\n", " ; ") + " "
+    if va_of(text)[0] is not None:
+        return None
     for word in [VC_WORDS, HUNTS_WORDS] + [w for w, _ in LEVEL_WORDS] + [TDC_WORDS, PERTE_WORDS]:
         found, rest = take(rest, word, NUM, after_first=True)
         if found:
@@ -481,14 +490,15 @@ ENORME_TEUB = r"""```
 
 
 def read(text):
-    """{"rep", "cap", "vc", "hunts", "army", "armes", "bouclier", "tdc"} du message ; None pour ce qui manque
+    """{"rep", "cap", "vc", "va", "hunts", "army", "armes", "bouclier", "tdc"} du message ; None pour ce qui manque
     (rep vaut 10 par défaut)."""
     rep, text = replique(text)
     cap, text = perte(text)
     vc, hunts, text = counts(text)
+    va, text = va_of(text)
     army, armes, bouclier, tdc = parse_partial(text)
-    return {"rep": rep, "cap": cap, "vc": vc, "hunts": hunts, "army": army, "armes": armes, "bouclier": bouclier,
-            "tdc": tdc}
+    return {"rep": rep, "cap": cap, "vc": vc, "va": va, "hunts": hunts, "army": army, "armes": armes,
+            "bouclier": bouclier, "tdc": tdc}
 
 
 def answer(text, fiche=None):

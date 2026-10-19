@@ -573,15 +573,15 @@ def test_export_niveau_joueur():
                {"id": 434, "pseudo": "Bull", "alliance": "OUAF"},
                {"id": 7, "pseudo": "Autre", "alliance": "LCN"}]
     fiches = [{"ID In Game": "Sirius", "Ouvrières": "100\u202f191", "Champignonnière": "16", "Étable à pucerons": "4",
-               "VC": 3},
+               "VC": 3, "VA": 5},
               {"ID In Game": "krokmou", "Ouvrières": "55 000", "Champignonnière": "12", "Étable à pucerons": ""},
               {"ID In Game": "Inconnu", "Ouvrières": "", "Champignonnière": "3", "Étable à pucerons": "1"},
               {"ID In Game": "", "Ouvrières": "9"}]
     lignes = profil.lignes_export(fiches, joueurs, "OUAF")
-    assert lignes == [[434, "Bull", 0, 0, 0, 0], ["", "Inconnu", 1, 3, 0, 0],
-                      [412, "Krokmou", 0, 12, 55000, 0], [426, "Sirius", 4, 16, 100191, 3]]
-    assert profil.texte_csv(lignes).splitlines()[:2] == ["player_id,pseudo,etable_puceron,champi,ouvriere,vc",
-                                                          "434,Bull,0,0,0,0"]
+    assert lignes == [[434, "Bull", 0, 0, 0, 0, 0], ["", "Inconnu", 1, 3, 0, 0, 0],
+                      [412, "Krokmou", 0, 12, 55000, 0, 0], [426, "Sirius", 4, 16, 100191, 3, 5]]
+    assert profil.texte_csv(lignes).splitlines()[:2] == ["player_id,pseudo,etable_puceron,champi,ouvriere,vc,va",
+                                                          "434,Bull,0,0,0,0,0"]
 
 
 def test_export_sans_api():
@@ -591,7 +591,7 @@ def test_export_sans_api():
         texte, ok = profil.export([{"Nom Discord": "x", "ID In Game": "Sirius", "Champignonnière": 16}], "OUAF")
     finally:
         profil.joueurs_api = ancien
-    assert not ok and texte.splitlines()[1] == ",Sirius,0,16,0,0"
+    assert not ok and texte.splitlines()[1] == ",Sirius,0,16,0,0,0"
 
 
 import renta_puceron as rp  # noqa: E402
@@ -662,7 +662,7 @@ def test_profil_armee_armes_bouclier():
 
 
 def test_profil_entete_avec_armee():
-    assert profil.HEADER[-4:-1] == ["Armes", "Bouclier", "Armée"]
+    assert profil.HEADER[-5:-2] == ["Armes", "Bouclier", "Armée"]
     assert profil.sheet_value("armee", {"jsn": 1425, "sn": 359}) == "1 425 JSN + 359 SN"
     assert profil.army_of("1 425 JSN + 359 SN") == {"jsn": 1425, "sn": 359}
 
@@ -710,7 +710,7 @@ def test_chasse_avec_la_fiche(monkeypatch):
 
 def test_lecture_partielle():
     assert risque.parse_partial("TDC 2 770") == (None, None, None, 2770)
-    assert risque.read("500 JSN, armes 3, réplique 30") == {"rep": 30, "cap": None, "vc": None, "hunts": None,
+    assert risque.read("500 JSN, armes 3, réplique 30") == {"rep": 30, "cap": None, "vc": None, "va": None, "hunts": None,
                                                             "army": {"jsn": 500}, "armes": 3, "bouclier": None,
                                                             "tdc": None}
 
@@ -791,7 +791,7 @@ def test_profil_vc():
     assert profil.parse("vc 3") == {"vc": 3}
     assert profil.parse("Vitesse de chasse 3 armes 8") == {"vc": 3, "armes": 8}
     assert profil.parse("VC 3") == {"vc": 3}                                             # pas un pseudo
-    assert profil.HEADER[-1] == "VC"
+    assert profil.HEADER[-2:] == ["VC", "VA"]
     db = fiches.Fiches(":memory:")
     db.save(1, "x", {"vc": 3})
     assert db.get(1)["vc"] == 3
@@ -814,3 +814,36 @@ def test_multi_message_une_seule_chasse(monkeypatch):
     reply = risque.answer("500 JSN vc 6 TDC 21 374")
     assert reply.startswith("🔀 1 seule chasse (VC 6 : jusqu'à 7 possibles). À 2 chasses ou plus, chaque chasse ferait "
                             "moins de 30 % de ton TDC (6 412 cm²)")
+
+
+@pytest.mark.parametrize("text, va", [
+    ("va 5", 5), ("VA 5", 5), ("Vitesse d'attaque 5", 5), ("vitesse d’attaque 5", 5), ("ça va", None),
+    ("5 va", None),
+])
+def test_va_lecture(text, va):
+    assert risque.va_of(text)[0] == va
+
+
+def test_va_fiche():
+    assert profil.parse("va 5 vc 3") == {"va": 5, "vc": 3}
+    assert profil.parse("VA 5") == {"va": 5}                                             # pas un pseudo
+    assert risque.read("TDC 2 770 va 5")["va"] == 5 and risque.read("TDC 2 770 va 5")["tdc"] == 2770
+    assert risque.army_only("500 JSN va 5") is None
+    assert risque.read("TDC 2770 ça va 3 chasses")["va"] is None                       # « 3 chasses » lu avant
+    db = fiches.Fiches(":memory:")
+    db.save(1, "x", {"va": 5})
+    assert db.get(1)["va"] == 5
+
+
+def test_base_ancienne_completee(tmp_path):
+    """Une base créée avant la VC et la VA reçoit les colonnes au démarrage."""
+    import sqlite3
+    path = str(tmp_path / "f.db")
+    old = sqlite3.connect(path)
+    old.execute("CREATE TABLE fiches (discord_id TEXT PRIMARY KEY, nom TEXT, pseudo TEXT, ov INTEGER, champi INTEGER, "
+                "puceron INTEGER, armes INTEGER, bouclier INTEGER, armee TEXT, armee_maj TEXT, maj TEXT)")
+    old.commit()
+    old.close()
+    db = fiches.Fiches(path)
+    db.save(1, "x", {"vc": 2, "va": 4})
+    assert (db.get(1)["vc"], db.get(1)["va"]) == (2, 4)

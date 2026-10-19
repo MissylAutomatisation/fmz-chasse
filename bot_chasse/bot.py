@@ -39,10 +39,10 @@ fiches_db = fiches.Fiches()
 ALLIANCE = os.getenv("ALLIANCE", "OUAF")
 
 
-@tree.command(name="niveau-joueur", description="Export CSV des fiches OUAF : étable, champi, ouvrières, VC")
+@tree.command(name="niveau-joueur", description="Export CSV des fiches OUAF : étable, champi, ouvrières, VC, VA")
 async def niveau_joueur(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    lignes = [{profil.LABELS[f]: fiche[f] for f in ("pseudo", "ov", "champi", "puceron", "vc") if fiche[f] is not None}
+    lignes = [{profil.LABELS[f]: fiche[f] for f in ("pseudo", "ov", "champi", "puceron", "vc", "va") if fiche[f] is not None}
               for fiche in fiches_db.all()]
     texte, avec_ids = await asyncio.to_thread(profil.export, lignes, ALLIANCE)
     note = "" if avec_ids else "\n⚠️ API du jeu injoignable : player_id vides, membres sans fiche manquants."
@@ -119,14 +119,14 @@ async def on_message(message: discord.Message):
 
 
 async def enregistrer_chasse(message: discord.Message):
-    """Armée, Armes, Bouclier et VC donnés dans le salon chasse remplacent ceux de la fiche (le TDC et le nombre de
+    """Armée, Armes, Bouclier, VC et VA donnés dans le salon chasse remplacent ceux de la fiche (le TDC et le nombre de
     chasses ne sont jamais gardés)."""
     try:
         found = risque.read(message.content)
     except risque.ParseError:
         return
-    values = {key: found[k] for key, k in (("armee", "army"), ("armes", "armes"), ("bouclier", "bouclier"), ("vc", "vc"))
-              if found[k] is not None}
+    fields = (("armee", "army"), ("armes", "armes"), ("bouclier", "bouclier"), ("vc", "vc"), ("va", "va"))
+    values = {key: found[k] for key, k in fields if found[k] is not None}
     if values:
         await enregistrer(message.author, values)
 

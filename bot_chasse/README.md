@@ -41,8 +41,8 @@ Dans un salon chasse, écris seulement `ov 15000` (aussi `Ouv 15000`, `ov: 15 00
 - Modèle : capacité 10 + 0,5 × niveau par ouvrière. Coût en ov modélisé, non vérifié (niveau 1 = Communication 1 à 3 = 560 ov, puis 320 × 2^n) ; le bois n'est pas compté. Détails : `connaissances/mecaniques.md`.
 
 ## Salon profil (pseudo en jeu, ov, Champignonnière, Étable à pucerons, armée, Armes, Bouclier)
-Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Missyl ov 1 234 567 champi 12 puceron 8`, ou colle son armée : `1 425 Jeunes Soldates Naines, 359 Soldates Naines, 100 Naines d’Elites, armes 8, bouclier 7`, et sa Vitesse de chasse : `vc 2` (mêmes écritures que le salon chasse). Le bot met à jour **sa** fiche et répond « ✅ Enregistré » sans notification.
-- La fiche est dans une base SQLite (`fiches.db`, à côté du bot), qui fait foi. Chaque enregistrement est recopié dans **sa** ligne du Google Sheet (une ligne par compte Discord : Nom Discord, ID In Game, ID Discord, Ouvrières, Champignonnière, Étable à pucerons, Mis à jour, Armes, Bouclier, Armée, VC). Une case modifiée à la main dans le sheet n'est pas relue : elle est écrasée au prochain enregistrement du joueur.
+Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Missyl ov 1 234 567 champi 12 puceron 8`, ou colle son armée : `1 425 Jeunes Soldates Naines, 359 Soldates Naines, 100 Naines d’Elites, armes 8, bouclier 7`, sa Vitesse de chasse : `vc 2` et sa Vitesse d'attaque : `va 5` (la VA est seulement gardée, le bot ne s'en sert pas pour la chasse ; écrire le mot puis le nombre) (mêmes écritures que le salon chasse). Le bot met à jour **sa** fiche et répond « ✅ Enregistré » sans notification.
+- La fiche est dans une base SQLite (`fiches.db`, à côté du bot), qui fait foi. Chaque enregistrement est recopié dans **sa** ligne du Google Sheet (une ligne par compte Discord : Nom Discord, ID In Game, ID Discord, Ouvrières, Champignonnière, Étable à pucerons, Mis à jour, Armes, Bouclier, Armée, VC, VA). Une case modifiée à la main dans le sheet n'est pas relue : elle est écrasée au prochain enregistrement du joueur.
 - Base vide au démarrage (premier lancement, machine de secours) : elle est remplie depuis le sheet.
 - Si la copie dans le sheet échoue, la fiche est quand même enregistrée et le bot le signale.
 - Pseudo en jeu : `pseudo X`, `ig X`, `in game X`, `id in game X`, `id ig X` (un mot : lettres, chiffres, `_`, `-`, `.` ; majuscules gardées). Sans mot-clé, un premier mot qui n'est ni un nombre ni un mot-clé est pris comme pseudo s'il est suivi d'au moins une valeur (`DogGyneco ov 63981 champi 12`).
@@ -54,7 +54,7 @@ Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Mi
 
 ## `/niveau-joueur` : export CSV des fiches OUAF
 Commande slash, réponse visible de toi seul : un fichier `niveau_joueur.csv` (et son texte, copiable sur mobile).
-- Colonnes : `player_id,pseudo,etable_puceron,champi,ouvriere,vc`, triées par pseudo.
+- Colonnes : `player_id,pseudo,etable_puceron,champi,ouvriere,vc,va`, triées par pseudo.
 - Lignes : les membres de l'alliance (`ALLIANCE` dans `.env`, OUAF par défaut) d'après l'API des exports publics du
   jeu, qui donne le `player_id`, complétés par les fiches de la base (pseudo comparé sans la casse). Valeur absente = 0.
 - Une fiche dont le pseudo n'est pas dans l'API garde un `player_id` vide. Si l'API est injoignable,
