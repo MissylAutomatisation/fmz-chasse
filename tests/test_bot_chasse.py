@@ -747,37 +747,49 @@ def test_multi_stats_additionnees():
 def test_multi_nombre_de_chasses(monkeypatch):
     vu = {}
     monkeypatch.setattr(risque, "table", lambda army, armes, bouclier, tdc, rep=10, hunts=1: vu.update(hunts=hunts)
-                        or "TABLEAU")
-    monkeypatch.setattr(risque, "best_hunts", lambda army, armes, bouclier, tdc, max_hunts, rep=10:
-                        vu.update(max_hunts=max_hunts) or 2)
+                        or f"TABLEAU {hunts}")
+    monkeypatch.setattr(risque, "compare_hunts", lambda army, armes, bouclier, tdc, vc, rep=10: vu.update(vc=vc) or [
+        {"hunts": 1, "size": 700, "total": 700, "mean": 40, "per_loss": 17.5, "per_hour": 1000},
+        {"hunts": 2, "size": 340, "total": 680, "mean": 42, "per_loss": 16.2, "per_hour": 1100}])
     fiche = {"armee": {"jsn": 500}, "vc": 2}
     reply = risque.answer("TDC 2 770", fiche)
-    assert reply.startswith("📋 Pris dans ta fiche : armée, VC") and "🔀 2 chasses en même temps (VC 2 : jusqu'à 3 possibles)" in reply and "Calystène" not in reply
-    assert (vu["hunts"], vu["max_hunts"]) == (2, 3)                                     # choisi jusqu'à VC + 1
-    risque.answer("TDC 2 770 1 chasse", fiche)
-    assert vu["hunts"] == 1                                                              # le message passe avant
-    risque.answer("500 JSN vc 4 TDC 2 770")
-    assert vu["max_hunts"] == 5
+    assert reply.startswith("📋 Pris dans ta fiche : armée, VC") and vu["vc"] == 2
+    assert "🛡 **Moins de pertes**\nTABLEAU 1" in reply and "🚀 **Plus rapide**\nTABLEAU 2" in reply
     vu.clear()
-    risque.answer("500 JSN TDC 2 770")
-    assert vu == {"hunts": 1}                                                            # sans VC : 1 chasse, rien à choisir
-    risque.answer("500 JSN vc 0 TDC 2 770")
-    assert vu == {"hunts": 1}
+    assert risque.answer("TDC 2 770 1 chasse", fiche) == "📋 Pris dans ta fiche : armée\nTABLEAU 1"   # imposé
+    assert "vc" not in vu
+    risque.answer("500 JSN vc 4 TDC 2 770")
+    assert vu["vc"] == 4
+    vu.clear()
+    assert risque.answer("500 JSN TDC 2 770") == "TABLEAU 1" and vu == {"hunts": 1}  # sans VC : 1 chasse
+    assert risque.answer("500 JSN vc 0 TDC 2 770") == "TABLEAU 1"
     assert "entre 1 et 20" in risque.answer("500 JSN TDC 2 770 50 chasses")
     assert "entre 1 et 20" in risque.answer("500 JSN TDC 2 770 vc 25")
     assert risque.army_only("500 JSN vc 2") is None
 
 
-def test_multi_choix_comme_calystene(monkeypatch):
-    """Le plus de chasses dont la chasse ⭐ fait au moins 30 % du TDC (1 000 TDC : 300 cm²)."""
-    star = {4: 250, 3: 299, 2: 300}
+def test_multi_comparaison(monkeypatch):
+    star = {1: (7502, 397), 2: (3571, 399), 3: (2294, 405), 4: (1662, 410), 5: (1286, 412), 6: (1046, 422)}
     monkeypatch.setattr(risque, "key_rows", lambda army, armes, bouclier, tdc, n, rep, hunts:
-                        [(100, 1, 0, 0, 0, "🛡"), (star[hunts], 9, 0, 0, 0, "⭐")])
-    assert risque.best_hunts({"jsn": 1}, 0, 0, 1000, 4) == 2
-    star[3] = 300
-    assert risque.best_hunts({"jsn": 1}, 0, 0, 1000, 4) == 3
-    star.update({3: 10, 2: 10})
-    assert risque.best_hunts({"jsn": 1}, 0, 0, 1000, 4) == 1
+                        [(100, 1, 1, 1, 100.0, "🛡"),
+                         (star[hunts][0], 9, star[hunts][1], 0, hunts * star[hunts][0] / star[hunts][1], "⭐")])
+    options = risque.compare_hunts({"jsn": 1}, 9, 6, 21374, 6)
+    assert [o["hunts"] for o in options] == [1, 2, 3, 4, 5]          # arrêt après deux baisses du cm²/heure
+    assert options[0]["per_hour"] == pytest.approx(7502 / ((21374 + 7502) * 0.9 ** 6 / 3600))
+    text, safe, fast = risque.comparison(options, 6)
+    assert (safe, fast) == (1, 3)
+    assert "🔀 Combien de chasses en même temps ? (VC 6 : jusqu'à 7)" in text
+    assert "  1 |    7 502 |  7 502 |    397 |      18,9 |    1 760 🛡" in text
+    assert "🚀" in text.splitlines()[8]
+
+
+def test_reponse_coupee_en_messages():
+    import bot
+    block = "```\n" + "x" * 1500 + "\n```"
+    parts = bot.chunks("intro\n" + block + "\n🛡 titre\n" + block + "\n🚀 titre\n" + block)
+    assert len(parts) == 3 and all(len(p) <= 2000 for p in parts)
+    assert all(p.count("```") == 2 for p in parts)                  # jamais un bloc coupé en deux
+    assert bot.chunks("court") == ["court"]
 
 
 def test_multi_tableau(monkeypatch):
@@ -808,9 +820,10 @@ def test_profil_mot_cle_jamais_pris_pour_pseudo(text, expected):
     assert profil.parse(text) == expected
 
 
-def test_multi_message_une_seule_chasse(monkeypatch):
-    monkeypatch.setattr(risque, "table", lambda *a, **k: "TABLEAU")
-    monkeypatch.setattr(risque, "best_hunts", lambda *a, **k: 1)
-    reply = risque.answer("500 JSN vc 6 TDC 21 374")
-    assert reply.startswith("🔀 1 seule chasse (VC 6 : jusqu'à 7 possibles). À 2 chasses ou plus, chaque chasse ferait "
-                            "moins de 30 % de ton TDC (6 412 cm²)")
+def test_prevenir_si_comparaison():
+    assert risque.compare_vc("TDC 2 770", {"vc": 6}) == 6
+    assert risque.compare_vc("500 JSN vc 2 TDC 2 770") == 2
+    assert risque.compare_vc("TDC 2 770 3 chasses", {"vc": 6}) is None          # nombre imposé : pas de comparaison
+    assert risque.compare_vc("TDC 2 770 perte 100", {"vc": 6}) is None
+    assert risque.compare_vc("TDC 2 770", {"vc": 0}) is None
+    assert risque.compare_vc("TDC 2 770") is None
