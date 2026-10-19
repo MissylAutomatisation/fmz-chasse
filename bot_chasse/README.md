@@ -22,7 +22,7 @@ Armée seule (sans Armes, Bouclier, TDC, perte ni réplique) : le bot calcule le
 Modèle (onglet « calcul manuel » du classeur BDD, valeurs intégrées dans `niveau_armes.py`) : passer à Armes n coûte C(n) = 80 × 2^(n−1) ouvrières de 60 s. Le niveau est rentable si 10 % de la FdF HB ≥ la FdF des unités pondues pendant ce temps à Armes n−1, soit HB ≥ S(n) = plafond(C(n) × 60 / ponte × attaque × (n + 9)). Ponte continue : seul S(n) est arrondi. Une question expire après 5 minutes ; relancer la commande remplace l'ancienne.
 
 ## Rentabilité de l'Étable à pucerons
-Dans un salon chasse, écris seulement `ov 15000` (aussi `ov: 15 000`, `ouvrières 15000`, `15000 ov`). Une phrase (« j'ai 15000 ov ») ne déclenche rien. Ou commande `/renta puceron ouvrieres:15000` partout.
+Dans un salon chasse, écris seulement `ov 15000` (aussi `Ouv 15000`, `ov: 15 000`, `ouvrières 15000`, `15000 ov`). Une phrase (« j'ai 15000 ov ») ne déclenche rien. Ou commande `/renta puceron ouvrieres:15000` partout.
 - Mets tes ouvrières **disponibles** (celles qui n'exploitent pas le TDC).
 - Le bot donne le dernier passage rentable (n → n+1), son coût en ov et le gain de capacité de convoi (tableau Avant / Après).
 - Bouton « Calculer avec mon niveau actuel » : niveau max rentable depuis ton niveau (0 = pas d'étable), coûts déduits au fur et à mesure.

@@ -598,7 +598,7 @@ def test_export_sans_api():
 import renta_puceron as rp  # noqa: E402
 
 
-@pytest.mark.parametrize("text", ["ov 15000", "OV 15 000", "ov: 15.000", "ouvrières 15000", "15000 ov", "15 000 OV"])
+@pytest.mark.parametrize("text", ["ov 15000", "OV 15 000", "ov: 15.000", "ouvrières 15000", "15000 ov", "15 000 OV", "Ouv 15000", "15000 ouv"])
 def test_puceron_lecture_message(text):
     assert rp.parse_workers_message(text) == 15000
 

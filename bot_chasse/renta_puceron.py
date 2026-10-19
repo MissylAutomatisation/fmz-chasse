@@ -60,7 +60,7 @@ def parse_workers_message(text: str) -> int | None:
         char for char in unicodedata.normalize("NFD", text.casefold())
         if not unicodedata.combining(char)
     ).strip().replace("\u00a0", " ").replace("\u202f", " ")
-    word = r"(?:ov|ouvriers?|ouvrieres?|ouvieres?)"
+    word = r"(?:ov|ouv|ouvriers?|ouvrieres?|ouvieres?)"
     match = (re.fullmatch(rf"{word} *:? *([0-9][0-9 .]*)", normalized)
              or re.fullmatch(rf"([0-9][0-9 .]*) *{word}", normalized))
     if not match:
