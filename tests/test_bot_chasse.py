@@ -752,7 +752,7 @@ def test_multi_nombre_de_chasses(monkeypatch):
                         vu.update(max_hunts=max_hunts) or 2)
     fiche = {"armee": {"jsn": 500}, "vc": 2}
     reply = risque.answer("TDC 2 770", fiche)
-    assert reply.startswith("📋 Pris dans ta fiche : armée, VC") and "🔀 2 chasses sur 3 possibles (VC 2)" in reply
+    assert reply.startswith("📋 Pris dans ta fiche : armée, VC") and "🔀 2 chasses en même temps (VC 2 : jusqu'à 3 possibles)" in reply and "Calystène" not in reply
     assert (vu["hunts"], vu["max_hunts"]) == (2, 3)                                     # choisi jusqu'à VC + 1
     risque.answer("TDC 2 770 1 chasse", fiche)
     assert vu["hunts"] == 1                                                              # le message passe avant
@@ -806,3 +806,11 @@ def test_profil_vc():
 ])
 def test_profil_mot_cle_jamais_pris_pour_pseudo(text, expected):
     assert profil.parse(text) == expected
+
+
+def test_multi_message_une_seule_chasse(monkeypatch):
+    monkeypatch.setattr(risque, "table", lambda *a, **k: "TABLEAU")
+    monkeypatch.setattr(risque, "best_hunts", lambda *a, **k: 1)
+    reply = risque.answer("500 JSN vc 6 TDC 21 374")
+    assert reply.startswith("🔀 1 seule chasse (VC 6 : jusqu'à 7 possibles). À 2 chasses ou plus, chaque chasse ferait "
+                            "moins de 30 % de ton TDC (6 412 cm²)")

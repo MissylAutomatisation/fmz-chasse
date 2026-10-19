@@ -534,9 +534,13 @@ def answer(text, fiche=None):
         return note + loss_table(army, armes, bouclier, tdc, cap)
     if hunts is None:
         hunts = best_hunts(army, armes, bouclier, tdc, vc + 1, rep) if vc else 1
-        if vc:
-            note += (f"🔀 {hunts} chasse{'s' * (hunts > 1)} sur {vc + 1} possibles (VC {vc}) : le plus de chasses "
-                     f"de {MIN_HUNT_SHARE} % du TDC ou plus, comme Calystène. `1 chasse` pour une seule.\n")
+        floor = fmt_n(round(tdc * MIN_HUNT_SHARE / 100))
+        if vc and hunts == 1:
+            note += (f"🔀 1 seule chasse (VC {vc} : jusqu'à {vc + 1} possibles). À 2 chasses ou plus, chaque chasse "
+                     f"ferait moins de {MIN_HUNT_SHARE} % de ton TDC ({floor} cm²) : pas rentable.\n")
+        elif vc:
+            note += (f"🔀 {hunts} chasses en même temps (VC {vc} : jusqu'à {vc + 1} possibles), chacune d'au moins "
+                     f"{MIN_HUNT_SHARE} % de ton TDC ({floor} cm²). `1 chasse` pour une seule.\n")
     return note + table(army, armes, bouclier, tdc, rep=rep, hunts=hunts)
 
 
