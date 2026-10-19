@@ -16,6 +16,11 @@ Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates
 - Ce qui est écrit dans le message passe avant la fiche, et **remplace** la fiche : la dernière armée donnée fait foi (aussi une armée seule envoyée pour le niveau d'Armes). Pareil pour Armes et Bouclier.
 - Le TDC n'est jamais enregistré.
 
+**Multi-chasses** (chasses lancées en même temps) : écris `3 chasses` dans le message, ou donne ta Vitesse de chasse (`vc 2` = 3 chasses, VC + 1) dans le salon profil ou le salon chasse. Le message passe avant la fiche (`1 chasse` pour revenir à une seule). Sans rien : 1 chasse.
+- Comme le simulateur Calystène : la chasse n° k part d'un TDC = TDC + (k − 1) × taille (les chasses en cours comptent), et l'armée est répartie au prorata de la difficulté de chaque chasse.
+- Le tableau donne la taille **par chasse** (`3×1 535 cm²`) ; risque = au moins une chasse au-dessus de la réplique ; pertes moyennes et pire cas = total des chasses (le pire cas est un majorant). En dessous : la répartition de l'armée pour ⭐, dans l'ordre de lancement.
+- `perte XXX` reste calculé pour 1 seule chasse. De 1 à 20 chasses.
+
 Armée seule (sans Armes, Bouclier, TDC, perte ni réplique) : le bot calcule le niveau d'Armes rentable au lieu du tableau. Il demande l'unité pondue (menu, bouton, ou son nom envoyé dans le salon), puis remplace la question par le résultat.
 
 `/niveau-armes` (commande slash, réponse visible de toi seul) : niveau d'Armes rentable.
@@ -35,8 +40,8 @@ Dans un salon chasse, écris seulement `ov 15000` (aussi `Ouv 15000`, `ov: 15 00
 - Modèle : capacité 10 + 0,5 × niveau par ouvrière. Coût en ov modélisé, non vérifié (niveau 1 = Communication 1 à 3 = 560 ov, puis 320 × 2^n) ; le bois n'est pas compté. Détails : `connaissances/mecaniques.md`.
 
 ## Salon profil (pseudo en jeu, ov, Champignonnière, Étable à pucerons, armée, Armes, Bouclier)
-Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Missyl ov 1 234 567 champi 12 puceron 8`, ou colle son armée : `1 425 Jeunes Soldates Naines, 359 Soldates Naines, 100 Naines d’Elites, armes 8, bouclier 7` (mêmes écritures que le salon chasse). Le bot met à jour **sa** fiche et répond « ✅ Enregistré » sans notification.
-- La fiche est dans une base SQLite (`fiches.db`, à côté du bot), qui fait foi. Chaque enregistrement est recopié dans **sa** ligne du Google Sheet (une ligne par compte Discord : Nom Discord, ID In Game, ID Discord, Ouvrières, Champignonnière, Étable à pucerons, Mis à jour, Armes, Bouclier, Armée). Une case modifiée à la main dans le sheet n'est pas relue : elle est écrasée au prochain enregistrement du joueur.
+Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Missyl ov 1 234 567 champi 12 puceron 8`, ou colle son armée : `1 425 Jeunes Soldates Naines, 359 Soldates Naines, 100 Naines d’Elites, armes 8, bouclier 7`, et sa Vitesse de chasse : `vc 2` (mêmes écritures que le salon chasse). Le bot met à jour **sa** fiche et répond « ✅ Enregistré » sans notification.
+- La fiche est dans une base SQLite (`fiches.db`, à côté du bot), qui fait foi. Chaque enregistrement est recopié dans **sa** ligne du Google Sheet (une ligne par compte Discord : Nom Discord, ID In Game, ID Discord, Ouvrières, Champignonnière, Étable à pucerons, Mis à jour, Armes, Bouclier, Armée, VC). Une case modifiée à la main dans le sheet n'est pas relue : elle est écrasée au prochain enregistrement du joueur.
 - Base vide au démarrage (premier lancement, machine de secours) : elle est remplie depuis le sheet.
 - Si la copie dans le sheet échoue, la fiche est quand même enregistrée et le bot le signale.
 - Pseudo en jeu : `pseudo X`, `ig X`, `in game X`, `id in game X`, `id ig X` (un mot : lettres, chiffres, `_`, `-`, `.` ; majuscules gardées). Sans mot-clé, un premier mot qui n'est ni un nombre ni un mot-clé est pris comme pseudo s'il est suivi d'au moins une valeur (`DogGyneco ov 63981 champi 12`).

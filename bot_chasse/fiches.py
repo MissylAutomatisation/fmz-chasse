@@ -11,7 +11,7 @@ from pathlib import Path
 import profil
 
 DEFAULT_PATH = Path(__file__).resolve().parent / "fiches.db"     # FICHES_DB dans .env pour un autre chemin
-COLUMNS = ("pseudo", "ov", "champi", "puceron", "armes", "bouclier", "armee")
+COLUMNS = ("pseudo", "ov", "champi", "puceron", "armes", "bouclier", "armee", "vc")
 
 
 class Fiches:
@@ -24,7 +24,10 @@ class Fiches:
         self.db.row_factory = sqlite3.Row
         self.db.execute("""CREATE TABLE IF NOT EXISTS fiches (
             discord_id TEXT PRIMARY KEY, nom TEXT, pseudo TEXT, ov INTEGER, champi INTEGER, puceron INTEGER,
-            armes INTEGER, bouclier INTEGER, armee TEXT, armee_maj TEXT, maj TEXT)""")
+            armes INTEGER, bouclier INTEGER, armee TEXT, armee_maj TEXT, maj TEXT, vc INTEGER)""")
+        known = {row[1] for row in self.db.execute("PRAGMA table_info(fiches)")}
+        if "vc" not in known:                                  # base créée avant la VC
+            self.db.execute("ALTER TABLE fiches ADD COLUMN vc INTEGER")
         self.db.commit()
 
     def get(self, discord_id: int) -> dict | None:

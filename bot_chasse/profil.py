@@ -8,13 +8,13 @@ from zoneinfo import ZoneInfo
 
 import risque
 
-FIELDS = ("pseudo", "ov", "champi", "puceron", "armes", "bouclier", "armee")
+FIELDS = ("pseudo", "ov", "champi", "puceron", "armes", "bouclier", "armee", "vc")
 LABELS = {"pseudo": "ID In Game", "ov": "Ouvrières", "champi": "Champignonnière", "puceron": "Étable à pucerons",
-          "armes": "Armes", "bouclier": "Bouclier", "armee": "Armée"}
+          "armes": "Armes", "bouclier": "Bouclier", "armee": "Armée", "vc": "VC"}
 NOM_DISCORD, ID_DISCORD, DATE = "Nom Discord", "ID Discord", "Mis à jour"
 # Ordre d'un sheet neuf ; ensuite chaque colonne est retrouvée par son titre, où qu'elle soit.
 HEADER = [NOM_DISCORD, LABELS["pseudo"], ID_DISCORD, LABELS["ov"], LABELS["champi"], LABELS["puceron"], DATE,
-          LABELS["armes"], LABELS["bouclier"], LABELS["armee"]]
+          LABELS["armes"], LABELS["bouclier"], LABELS["armee"], LABELS["vc"]]
 
 # Pseudo en jeu : un mot (lettres, chiffres, _ - .), casse gardée ; lu avant les nombres puis retiré du texte.
 PSEUDO = re.compile(r"\b(?:pseudo|id\s*(?:in\s*game|ig|jeu)|in\s*game|ingame|ig)\b\s*[:=]?\s*(?P<pseudo>[\w.\-]+)",
@@ -79,14 +79,16 @@ def is_value_word(word: str) -> bool:
     """Mot-clé d'une valeur (ov, champi, Armes, Bouclier, nom d'unité…) : jamais pris pour un pseudo."""
     if re.fullmatch(KEYWORD, normalize(word)):
         return True
-    words = [(w, False) for w, _ in risque.LEVEL_WORDS] + [(w, case) for w, _, case in risque.UNIT_WORDS]
+    words = ([(w, False) for w, _ in risque.LEVEL_WORDS] + [(w, case) for w, _, case in risque.UNIT_WORDS]
+             + [(risque.VC_WORDS, False), (r"vitesses?", False)])
     return any(re.fullmatch(w, word, 0 if case else re.I) for w, case in words)
 
 
 def parse_values(text: str) -> dict:
-    """Armée, Armes et Bouclier (lus comme dans le salon chasse), puis ouvrières, Champignonnière, Étable."""
+    """Armée, Armes, Bouclier et VC (lus comme dans le salon chasse), puis ouvrières, Champignonnière, Étable."""
+    vc, _, text = risque.counts(text)
     army, armes, bouclier, _ = risque.parse_partial(text)
-    found = {k: v for k, v in (("armes", armes), ("bouclier", bouclier), ("armee", army)) if v is not None}
+    found = {k: v for k, v in (("armes", armes), ("bouclier", bouclier), ("armee", army), ("vc", vc)) if v is not None}
     return {**parse_numbers(text), **found}
 
 

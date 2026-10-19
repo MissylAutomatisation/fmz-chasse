@@ -119,12 +119,14 @@ async def on_message(message: discord.Message):
 
 
 async def enregistrer_chasse(message: discord.Message):
-    """Armée, Armes et Bouclier donnés dans le salon chasse remplacent ceux de la fiche (le TDC n'est jamais gardé)."""
+    """Armée, Armes, Bouclier et VC donnés dans le salon chasse remplacent ceux de la fiche (le TDC et le nombre de
+    chasses ne sont jamais gardés)."""
     try:
-        _, _, army, armes, bouclier, _ = risque.read(message.content)
+        found = risque.read(message.content)
     except risque.ParseError:
         return
-    values = {k: v for k, v in (("armee", army), ("armes", armes), ("bouclier", bouclier)) if v is not None}
+    values = {key: found[k] for key, k in (("armee", "army"), ("armes", "armes"), ("bouclier", "bouclier"), ("vc", "vc"))
+              if found[k] is not None}
     if values:
         await enregistrer(message.author, values)
 

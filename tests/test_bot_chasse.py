@@ -661,7 +661,7 @@ def test_profil_armee_armes_bouclier():
 
 
 def test_profil_entete_avec_armee():
-    assert profil.HEADER[-3:] == ["Armes", "Bouclier", "Armée"]
+    assert profil.HEADER[-4:-1] == ["Armes", "Bouclier", "Armée"]
     assert profil.sheet_value("armee", {"jsn": 1425, "sn": 359}) == "1 425 JSN + 359 SN"
     assert profil.army_of("1 425 JSN + 359 SN") == {"jsn": 1425, "sn": 359}
 
@@ -692,7 +692,7 @@ def test_fiches_importees_depuis_le_sheet():
 
 def test_chasse_avec_la_fiche(monkeypatch):
     vu = {}
-    monkeypatch.setattr(risque, "table", lambda army, armes, bouclier, tdc, rep=10: vu.update(
+    monkeypatch.setattr(risque, "table", lambda army, armes, bouclier, tdc, rep=10, hunts=1: vu.update(
         army=army, armes=armes, bouclier=bouclier, tdc=tdc) or "TABLEAU")
     fiche = {"armee": {"jsn": 1425, "sn": 359}, "armee_maj": "19/10/2026 14:02", "armes": 8, "bouclier": 7}
     assert risque.answer("TDC 2 770", fiche) == ("📋 Pris dans ta fiche : armée du 19/10/2026 14:02, Armes, Bouclier\n"
@@ -709,7 +709,71 @@ def test_chasse_avec_la_fiche(monkeypatch):
 
 def test_lecture_partielle():
     assert risque.parse_partial("TDC 2 770") == (None, None, None, 2770)
-    assert risque.read("500 JSN, armes 3, réplique 30") == (30, None, {"jsn": 500}, 3, None, None)
+    assert risque.read("500 JSN, armes 3, réplique 30") == {"rep": 30, "cap": None, "vc": None, "hunts": None,
+                                                            "army": {"jsn": 500}, "armes": 3, "bouclier": None,
+                                                            "tdc": None}
+
+
+# --- Multi-chasses (chasses simultanées, comme le simulateur Calystène) ---
+@pytest.mark.parametrize("text, vc, hunts", [
+    ("TDC 2 770 3 chasses", None, 3), ("chasses 3, TDC 2770", None, 3), ("vc 2, TDC 2770", 2, None),
+    ("Vitesse de chasse 2 TDC 2770", 2, None), ("Terrain de chasse 2770", None, None), ("multi-chasse 4", None, 4),
+])
+def test_multi_lecture(text, vc, hunts):
+    found = risque.read(text)
+    assert (found["vc"], found["hunts"]) == (vc, hunts)
+    assert found["tdc"] in (2770, None)
+
+
+def test_multi_repartition_selon_la_difficulte():
+    army = {"jsn": 1425, "sn": 359, "js": 5601, "a": 4725}
+    parts = risque.split_army(army, 14674, 600, 3)
+    assert [sum(p[u] for p in parts) for u in army] == list(army.values())               # aucune unité perdue
+    assert sum(parts[0].values()) <= sum(parts[1].values()) <= sum(parts[2].values())    # la dernière est la plus dure
+    assert risque.split_army(army, 14674, 600, 1) == [army]
+
+
+def test_multi_stats_additionnees():
+    army = {"jsn": 2000, "js": 1500}
+    one = [risque.stats(p, 3000 + k * 50, 50, 2, 1, 500, 1 + k) for k, p in
+           enumerate(risque.split_army(army, 3000, 50, 2))]
+    risk, mean, worst, *_ = risque.stats(army, 3000, 50, 2, 1, 500, hunts=2)
+    assert mean == pytest.approx(one[0][1] + one[1][1]) and worst == one[0][2] + one[1][2]
+    assert risk == pytest.approx(100 * (1 - (1 - one[0][0] / 100) * (1 - one[1][0] / 100)))
+    assert risque.stats({"jsn": 1}, 3000, 50, 2, 1, 500, hunts=2)[0] == 100.0             # pas assez d'unités
+
+
+def test_multi_nombre_de_chasses(monkeypatch):
+    vu = {}
+    monkeypatch.setattr(risque, "table", lambda army, armes, bouclier, tdc, rep=10, hunts=1: vu.update(hunts=hunts)
+                        or "TABLEAU")
+    fiche = {"armee": {"jsn": 500}, "vc": 2}
+    assert risque.answer("TDC 2 770", fiche).startswith("📋 Pris dans ta fiche : armée, VC") and vu["hunts"] == 3
+    risque.answer("TDC 2 770 1 chasse", fiche)
+    assert vu["hunts"] == 1                                                              # le message passe avant
+    risque.answer("500 JSN vc 4 TDC 2 770")
+    assert vu["hunts"] == 5
+    risque.answer("500 JSN TDC 2 770")
+    assert vu["hunts"] == 1                                                              # sans rien : 1 chasse
+    assert "entre 1 et 20" in risque.answer("500 JSN TDC 2 770 50 chasses")
+    assert risque.army_only("500 JSN vc 2") is None
+
+
+def test_multi_tableau(monkeypatch):
+    army = {"jsn": 3000, "js": 2000}
+    text = risque.table(army, 2, 1, 3000, n=300, hunts=3)
+    assert "3 chasses en même temps" in text and "3×" in text and "⭐ Répartition pour 3×" in text
+    assert text.count("\n 1. ") == 1 and "\n 3. " in text
+
+
+def test_profil_vc():
+    assert profil.parse("vc 3") == {"vc": 3}
+    assert profil.parse("Vitesse de chasse 3 armes 8") == {"vc": 3, "armes": 8}
+    assert profil.parse("VC 3") == {"vc": 3}                                             # pas un pseudo
+    assert profil.HEADER[-1] == "VC"
+    db = fiches.Fiches(":memory:")
+    db.save(1, "x", {"vc": 3})
+    assert db.get(1)["vc"] == 3
 
 
 @pytest.mark.parametrize("text, expected", [
