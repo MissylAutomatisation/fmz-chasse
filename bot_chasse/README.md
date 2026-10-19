@@ -21,6 +21,15 @@ Armée seule (sans Armes, Bouclier, TDC, perte ni réplique) : le bot calcule le
 
 Modèle (onglet « calcul manuel » du classeur BDD, valeurs intégrées dans `niveau_armes.py`) : passer à Armes n coûte C(n) = 80 × 2^(n−1) ouvrières de 60 s. Le niveau est rentable si 10 % de la FdF HB ≥ la FdF des unités pondues pendant ce temps à Armes n−1, soit HB ≥ S(n) = plafond(C(n) × 60 / ponte × attaque × (n + 9)). Ponte continue : seul S(n) est arrondi. Une question expire après 5 minutes ; relancer la commande remplace l'ancienne.
 
+## Rentabilité de l'Étable à pucerons
+Dans un salon chasse, écris seulement `ov 15000` (aussi `ov: 15 000`, `ouvrières 15000`, `15000 ov`). Une phrase (« j'ai 15000 ov ») ne déclenche rien. Ou commande `/renta puceron ouvrieres:15000` partout.
+- Mets tes ouvrières **disponibles** (celles qui n'exploitent pas le TDC).
+- Le bot donne le dernier passage rentable (n → n+1), son coût en ov et le gain de capacité de convoi (tableau Avant / Après).
+- Bouton « Calculer avec mon niveau actuel » : niveau max rentable depuis ton niveau (0 = pas d'étable), coûts déduits au fur et à mesure.
+- Bouton « Voir les valeurs exactes » : chiffres complets, visibles de toi seul.
+- Boutons réservés à l'auteur, 5 minutes. Un nouvel effectif remplace la question en attente.
+- Modèle : capacité 10 + 0,5 × niveau par ouvrière. Coût en ov modélisé, non vérifié (niveau 1 = Communication 1 à 3 = 560 ov, puis 320 × 2^n) ; le bois n'est pas compté. Détails : `connaissances/mecaniques.md`.
+
 ## Salon profil (pseudo en jeu, ov, Champignonnière, Étable à pucerons)
 Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Missyl ov 1 234 567 champi 12 puceron 8`. Le bot met à jour **sa** ligne dans le Google Sheet (une ligne par compte Discord : Nom Discord, ID In Game, ID Discord, Ouvrières, Champignonnière, Étable à pucerons, Mis à jour) et répond « ✅ Enregistré » sans notification.
 - Pseudo en jeu : `pseudo X`, `ig X`, `in game X`, `id in game X`, `id ig X` (un mot : lettres, chiffres, `_`, `-`, `.` ; majuscules gardées). Sans mot-clé, un premier mot qui n'est ni un nombre ni un mot-clé est pris comme pseudo s'il est suivi d'au moins une valeur (`DogGyneco ov 63981 champi 12`).
@@ -41,6 +50,7 @@ Commande slash, réponse visible de toi seul : un fichier `niveau_joueur.csv` (e
 ## Fichiers
 - `risque.py` : lecture du texte et calcul (moteur `hunt_mc.py`, copié depuis `tools/`). Essai : `python risque.py "948 JSN, Armes 2, Bouclier 2, TDC 2 148"`.
 - `niveau_armes.py` : commande `/niveau-armes` (calcul + formulaire, menu, 4 emojis intégrés).
+- `renta_puceron.py` : `/renta puceron` et message `ov 15000` (calcul, boutons, fenêtre du niveau actuel).
 - `profil.py` : salon profil (lecture du message + écriture dans le Google Sheet) et export CSV de `/niveau-joueur`.
 - `bot.py` : le bot (lit les salons de `CHANNEL_ID`, séparés par des virgules : un salon par serveur Discord). Dans les salons de `SILENT_CHANNEL_IDS`, il répond sans notification.
 - `.env` (sur le Pi seulement, secret) : `DISCORD_TOKEN=…` et `CHANNEL_ID=…`.
@@ -54,7 +64,7 @@ Commande slash, réponse visible de toi seul : un fichier `niveau_joueur.csv` (e
 ## Mettre à jour
 Depuis le PC, dans `bot_chasse/` :
 ```
-scp bot.py risque.py niveau_armes.py profil.py ../tools/hunt_mc.py raspberrypi:MyProjects/bot_chasse/
+scp bot.py risque.py niveau_armes.py profil.py renta_puceron.py ../tools/hunt_mc.py raspberrypi:MyProjects/bot_chasse/
 ssh raspberrypi sudo systemctl restart bot-chasse
 ```
 

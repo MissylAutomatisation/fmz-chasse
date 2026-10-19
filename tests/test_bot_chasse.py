@@ -437,7 +437,7 @@ def test_armes_bot_garde_ses_autres_evenements():
     os.environ.setdefault("CHANNEL_ID", "1")
     import bot
     names = [c.name for c in bot.tree.get_commands()]
-    assert sorted(names) == ["niveau-armes", "niveau-joueur"]              # un seul arbre pour toutes les commandes
+    assert sorted(names) == ["niveau-armes", "niveau-joueur", "renta"]             # un seul arbre pour toutes les commandes
     assert bot.client.on_message.__module__ == "bot" and bot.client.on_ready.__module__ == "bot"
     assert not hasattr(bot, "niveau")                                      # ancien /niveau retiré
 
@@ -593,3 +593,53 @@ def test_export_sans_api():
     finally:
         profil.joueurs_api = ancien
     assert not ok and texte.splitlines()[1] == ",Sirius,0,16,0"
+
+
+import renta_puceron as rp  # noqa: E402
+
+
+@pytest.mark.parametrize("text", ["ov 15000", "OV 15 000", "ov: 15.000", "ouvrières 15000", "15000 ov", "15 000 OV"])
+def test_puceron_lecture_message(text):
+    assert rp.parse_workers_message(text) == 15000
+
+
+@pytest.mark.parametrize("text", ["j'ai 15000 ov", "ov 15k", "ov", "948 JSN, Armes 2, Bouclier 2, TDC 2 148"])
+def test_puceron_message_ignore(text):
+    assert rp.parse_workers_message(text) is None
+
+
+def test_puceron_passage_marginal():
+    r = rp.calculate_pucerons(15000)
+    assert (r.comparison_from_level, r.level, r.sacrificed_workers, r.remaining_workers) == (1, 2, 640, 14360)
+    assert (r.capacity_before_twice, r.capacity_after_twice, r.capacity_gain_twice) == (315000, 315920, 920)
+
+
+def test_puceron_seuils():
+    assert rp.calculate_pucerons(11760).level == 0
+    r = rp.calculate_pucerons(11761)
+    assert r.level == 1 and r.capacity_gain_twice == 1                       # gain exact de 0,5 rss
+
+
+@pytest.mark.parametrize("workers, level, target, cost, remaining", [
+    (15000, 0, 2, 1200, 13800),
+    (14081, 0, 1, 560, 13521),                                                 # le sacrifice initial bloque le niveau 2
+    (21_000_000, 0, 11, 655280, 20344720),
+    (15000, 3, 3, 0, 15000),                                                   # jamais de baisse de niveau
+])
+def test_puceron_niveau_actuel(workers, level, target, cost, remaining):
+    r = rp.calculate_pucerons(workers, level)
+    assert (r.projected_level, r.projected_cost, r.projected_remaining_workers) == (target, cost, remaining)
+
+
+def test_puceron_niveau_actuel_capacite():
+    r = rp.calculate_pucerons(15000, 0)
+    assert (r.current_capacity_twice, r.projected_capacity_twice, r.projected_gain_twice) == (300000, 303600, 3600)
+    assert rp.calculate_pucerons(21_000_000).level == 12
+
+
+def test_puceron_commande_enregistree():
+    from discord import app_commands
+    client = rp.discord.Client(intents=rp.discord.Intents.default())
+    tree = app_commands.CommandTree(client)
+    rp.setup(tree)
+    assert tree.get_command("renta").get_command("puceron") is not None

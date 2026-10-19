@@ -1,5 +1,6 @@
 """Bot Discord « Chasse » : lit des salons dédiés (CHANNEL_ID=id1,id2) ; chaque message (armée, Armes, Bouclier, TDC) reçoit le tableau du
-risque selon la taille de chasse ; une armée seule reçoit le niveau d'Armes rentable."""
+risque selon la taille de chasse ; une armée seule reçoit le niveau d'Armes rentable ; « ov 15000 » reçoit la rentabilité
+de l'Étable à pucerons."""
 import asyncio
 import io
 import logging
@@ -11,6 +12,7 @@ from dotenv import load_dotenv
 
 import niveau_armes
 import profil
+import renta_puceron
 import risque
 
 load_dotenv()
@@ -21,6 +23,7 @@ intents.message_content = True                                 # à activer auss
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 armes_emojis = niveau_armes.setup(client, tree)                # /niveau-armes
+renta_puceron.setup(tree)                                      # /renta puceron
 CHANNEL_IDS = {int(c) for c in os.getenv("CHANNEL_ID", "").replace(" ", "").split(",") if c}   # « id1,id2 » : un salon par serveur
 SILENT_CHANNEL_IDS = {1556337362211053741}                     # réponses sans notification
 PROFIL_CHANNEL_IDS = {1559888062430052474}                        # pseudo, ov, Champignonnière, Étable -> Google Sheet
@@ -77,6 +80,8 @@ async def on_message(message: discord.Message):
         return
     silent = message.channel.id in SILENT_CHANNEL_IDS
     if await niveau_armes.answer_unit_name(message, silent):  # réponse à « Quelle unité produis-tu ? »
+        return
+    if await renta_puceron.answer_message(message, silent):   # « ov 15000 » : rentabilité des pucerons
         return
     army = risque.army_only(message.content)
     if army:                                                   # armée seule : niveau d'Armes rentable
