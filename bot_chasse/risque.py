@@ -48,6 +48,8 @@ PERTE_WORDS = r"pertes?(?:\s+max(?:imum|imales?|i)?)?"      # « perte 100 », �
 VC_WORDS = r"vc|vitesses?\s+de\s+chasses?"           # « vc 2 », « Vitesse de chasse 2 » : VC + 1 chasses simultanées
 HUNTS_WORDS = r"(?<!de )chasses?|multi[\s-]?chasses?"   # « 3 chasses », « chasses 3 » ; pas « terrain de chasse »
 MAX_HUNTS = 20
+MIN_HUNT_SHARE = 30                                  # taille mini d'une chasse en multi : 30 % du TDC (Calystène)
+CHOICE_DRAWS = 1000                                  # tirages pour choisir le nombre de chasses (le tableau en garde 5 000)
 
 
 class ParseError(ValueError):
@@ -375,6 +377,17 @@ def fdf(army, armes):
     return round(sum(hunt_mc.UNITS[u][1] * k for u, k in army.items()) * (1 + 0.1 * armes))
 
 
+def best_hunts(army, armes, bouclier, tdc, max_hunts, rep=10, n=CHOICE_DRAWS):
+    """Nombre de chasses simultanées, comme le mode auto de Calystène : le plus grand nombre (≤ max_hunts) dont la
+    chasse ⭐ fait au moins MIN_HUNT_SHARE % du TDC ; 1 sinon."""
+    floor = round(tdc * MIN_HUNT_SHARE / 100)
+    for hunts in range(max_hunts, 1, -1):
+        rows = key_rows(army, armes, bouclier, tdc, n, rep, hunts)
+        if next((r[0] for r in rows if "⭐" in r[5]), 0) >= floor:
+            return hunts
+    return 1
+
+
 def table(army, armes, bouclier, tdc, n=5000, rep=10, hunts=1):
     """Le message prêt à coller sur Discord (avec les ```), étroit pour le téléphone : les lignes utiles.
 
@@ -503,8 +516,8 @@ def answer(text, fiche=None):
         if vc is None and found["hunts"] is None and fiche.get("vc") is not None:
             vc = fiche["vc"]
             from_fiche.append("VC")
-        hunts = found["hunts"] or (vc + 1 if vc is not None else 1)
-        if not 1 <= hunts <= MAX_HUNTS:
+        hunts = found["hunts"]                           # « 3 chasses » : imposé ; sinon choisi selon la VC, plus bas
+        if not 1 <= (hunts or (vc or 0) + 1) <= MAX_HUNTS:
             raise ParseError(f"Nombre de chasses entre 1 et {MAX_HUNTS}.")
         if not army:
             raise ParseError(NO_UNIT + "\nOu enregistre ton armée dans le salon profil, puis écris juste `TDC 2 770`.")
@@ -516,9 +529,14 @@ def answer(text, fiche=None):
         return f"❌ {e}\nExemple : `1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770` (+ `réplique 30` ou `perte 100` si besoin)"
     note = f"📋 Pris dans ta fiche : {', '.join(from_fiche)}\n" if from_fiche else ""
     if cap is not None:                                  # « perte XXX » : une seule chasse
-        if hunts > 1:
+        if (hunts or 1) > 1:
             note += "ℹ️ `perte` : calcul pour 1 seule chasse.\n"
         return note + loss_table(army, armes, bouclier, tdc, cap)
+    if hunts is None:
+        hunts = best_hunts(army, armes, bouclier, tdc, vc + 1, rep) if vc else 1
+        if vc:
+            note += (f"🔀 {hunts} chasse{'s' * (hunts > 1)} sur {vc + 1} possibles (VC {vc}) : le plus de chasses "
+                     f"de {MIN_HUNT_SHARE} % du TDC ou plus, comme Calystène. `1 chasse` pour une seule.\n")
     return note + table(army, armes, bouclier, tdc, rep=rep, hunts=hunts)
 
 

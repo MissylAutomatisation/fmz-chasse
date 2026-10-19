@@ -747,16 +747,36 @@ def test_multi_nombre_de_chasses(monkeypatch):
     vu = {}
     monkeypatch.setattr(risque, "table", lambda army, armes, bouclier, tdc, rep=10, hunts=1: vu.update(hunts=hunts)
                         or "TABLEAU")
+    monkeypatch.setattr(risque, "best_hunts", lambda army, armes, bouclier, tdc, max_hunts, rep=10:
+                        vu.update(max_hunts=max_hunts) or 2)
     fiche = {"armee": {"jsn": 500}, "vc": 2}
-    assert risque.answer("TDC 2 770", fiche).startswith("📋 Pris dans ta fiche : armée, VC") and vu["hunts"] == 3
+    reply = risque.answer("TDC 2 770", fiche)
+    assert reply.startswith("📋 Pris dans ta fiche : armée, VC") and "🔀 2 chasses sur 3 possibles (VC 2)" in reply
+    assert (vu["hunts"], vu["max_hunts"]) == (2, 3)                                     # choisi jusqu'à VC + 1
     risque.answer("TDC 2 770 1 chasse", fiche)
     assert vu["hunts"] == 1                                                              # le message passe avant
     risque.answer("500 JSN vc 4 TDC 2 770")
-    assert vu["hunts"] == 5
+    assert vu["max_hunts"] == 5
+    vu.clear()
     risque.answer("500 JSN TDC 2 770")
-    assert vu["hunts"] == 1                                                              # sans rien : 1 chasse
+    assert vu == {"hunts": 1}                                                            # sans VC : 1 chasse, rien à choisir
+    risque.answer("500 JSN vc 0 TDC 2 770")
+    assert vu == {"hunts": 1}
     assert "entre 1 et 20" in risque.answer("500 JSN TDC 2 770 50 chasses")
+    assert "entre 1 et 20" in risque.answer("500 JSN TDC 2 770 vc 25")
     assert risque.army_only("500 JSN vc 2") is None
+
+
+def test_multi_choix_comme_calystene(monkeypatch):
+    """Le plus de chasses dont la chasse ⭐ fait au moins 30 % du TDC (1 000 TDC : 300 cm²)."""
+    star = {4: 250, 3: 299, 2: 300}
+    monkeypatch.setattr(risque, "key_rows", lambda army, armes, bouclier, tdc, n, rep, hunts:
+                        [(100, 1, 0, 0, 0, "🛡"), (star[hunts], 9, 0, 0, 0, "⭐")])
+    assert risque.best_hunts({"jsn": 1}, 0, 0, 1000, 4) == 2
+    star[3] = 300
+    assert risque.best_hunts({"jsn": 1}, 0, 0, 1000, 4) == 3
+    star.update({3: 10, 2: 10})
+    assert risque.best_hunts({"jsn": 1}, 0, 0, 1000, 4) == 1
 
 
 def test_multi_tableau(monkeypatch):

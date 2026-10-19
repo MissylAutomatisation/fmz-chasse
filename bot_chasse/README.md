@@ -16,7 +16,8 @@ Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates
 - Ce qui est écrit dans le message passe avant la fiche, et **remplace** la fiche : la dernière armée donnée fait foi (aussi une armée seule envoyée pour le niveau d'Armes). Pareil pour Armes et Bouclier.
 - Le TDC n'est jamais enregistré.
 
-**Multi-chasses** (chasses lancées en même temps) : écris `3 chasses` dans le message, ou donne ta Vitesse de chasse (`vc 2` = 3 chasses, VC + 1) dans le salon profil ou le salon chasse. Le message passe avant la fiche (`1 chasse` pour revenir à une seule). Sans rien : 1 chasse.
+**Multi-chasses** (chasses lancées en même temps) : donne ta Vitesse de chasse (`vc 2`) dans le salon profil (ou le salon chasse) : le bot **choisit** le nombre de chasses, jusqu'à VC + 1, comme le mode auto de Calystène : le plus grand nombre dont la chasse ⭐ fait au moins 30 % du TDC (`MIN_HUNT_SHARE`), sinon 1. Une ligne « 🔀 2 chasses sur 3 possibles (VC 2) » l'indique. `3 chasses` dans le message impose le nombre (`1 chasse` pour une seule). Sans VC : 1 chasse.
+- Le choix se fait sur 1 000 tirages par taille (`CHOICE_DRAWS`), le tableau final sur 5 000 : à la limite des 30 %, la chasse ⭐ affichée peut tomber juste en dessous.
 - Comme le simulateur Calystène : la chasse n° k part d'un TDC = TDC + (k − 1) × taille (les chasses en cours comptent), et l'armée est répartie au prorata de la difficulté de chaque chasse.
 - Le tableau donne la taille **par chasse** (`3×1 535 cm²`) ; risque = au moins une chasse au-dessus de la réplique ; pertes moyennes et pire cas = total des chasses (le pire cas est un majorant). En dessous : la répartition de l'armée pour ⭐, dans l'ordre de lancement.
 - `perte XXX` reste calculé pour 1 seule chasse. De 1 à 20 chasses.
