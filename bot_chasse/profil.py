@@ -65,7 +65,7 @@ def parse(text: str) -> dict[str, int | str]:
         # Sans mot-clé, un premier mot qui n'est ni un nombre ni un mot-clé est le pseudo (« DogGyneco ov 63981 »),
         # à condition que la suite donne au moins une valeur : « bonjour » seul reste incompris.
         m = BARE_PSEUDO.match(text)
-        if m and not re.fullmatch(KEYWORD, normalize(m["pseudo"])) and not m["pseudo"][0].isdigit():
+        if m and not is_value_word(m["pseudo"]) and not m["pseudo"][0].isdigit():
             rest = parse_values(text[m.end():])
             if rest:
                 return {"pseudo": m["pseudo"], **rest}
@@ -73,6 +73,14 @@ def parse(text: str) -> dict[str, int | str]:
     if not found:
         raise ProfilError(USAGE)
     return found
+
+
+def is_value_word(word: str) -> bool:
+    """Mot-clé d'une valeur (ov, champi, Armes, Bouclier, nom d'unité…) : jamais pris pour un pseudo."""
+    if re.fullmatch(KEYWORD, normalize(word)):
+        return True
+    words = [(w, False) for w, _ in risque.LEVEL_WORDS] + [(w, case) for w, _, case in risque.UNIT_WORDS]
+    return any(re.fullmatch(w, word, 0 if case else re.I) for w, case in words)
 
 
 def parse_values(text: str) -> dict:

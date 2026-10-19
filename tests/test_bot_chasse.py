@@ -710,3 +710,14 @@ def test_chasse_avec_la_fiche(monkeypatch):
 def test_lecture_partielle():
     assert risque.parse_partial("TDC 2 770") == (None, None, None, 2770)
     assert risque.read("500 JSN, armes 3, réplique 30") == (30, None, {"jsn": 500}, 3, None, None)
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("Arme 9 bouclier 6", {"armes": 9, "bouclier": 6}),
+    ("Armes 9", {"armes": 9}),
+    ("Bouclier 6 armes 9", {"armes": 9, "bouclier": 6}),
+    ("JSN 1425 SN 359", {"armee": {"jsn": 1425, "sn": 359}}),
+    ("Missyl arme 9", {"pseudo": "Missyl", "armes": 9}),
+])
+def test_profil_mot_cle_jamais_pris_pour_pseudo(text, expected):
+    assert profil.parse(text) == expected
