@@ -10,7 +10,11 @@ Ajoute `réplique 30` (ou `réplique 50`) pour compter le risque sur la répliqu
 
 Ajoute `perte 100` pour avoir seulement la plus grosse chasse dont le **pire cas** reste ≤ 100 pertes : une ligne (Chasse, Pertes moy., cm²/perte, Pire cas), puis « 📊 Chances selon les pertes » : 4 tranches égales de 0 à la limite (`BUCKETS`), avec le % des chasses dans chacune (total 100 %), sans réplique. Si le pire cas touche d'autres unités que les JSN, une ligne en dessous donne le détail exact du pire combat (« Pire cas : 80 JSN + 20 SN »). Une tranche presque vide affiche « < 0,1 % » (0 % = jamais). Une limite égale ou plus grande que l'armée est ramenée à l'armée moins 1 : une chasse perdue n'est jamais proposée. Écritures acceptées : perte 100, pertes 100, perte max 100, pertes: 100, 100 pertes.
 
-Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates Naines… »). Unités : toutes (JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE), noms longs ou abréviations ; S, C et A seuls en majuscule. Armes et Bouclier absents = niveau 0. Le TDC est obligatoire.
+Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates Naines… »). Unités : toutes (JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE), noms longs ou abréviations ; S, C et A seuls en majuscule. Le TDC est obligatoire.
+
+**Fiche du joueur** : ce qui manque dans le message (armée, Armes, Bouclier) est pris dans sa fiche (salon profil). Avec une fiche complète, `TDC 2 770` suffit. Le tableau commence alors par « 📋 Pris dans ta fiche : armée du 19/10/2026 14:02, Armes, Bouclier ». Sans fiche, Armes et Bouclier absents = niveau 0.
+- Ce qui est écrit dans le message passe avant la fiche, et **remplace** la fiche : la dernière armée donnée fait foi (aussi une armée seule envoyée pour le niveau d'Armes). Pareil pour Armes et Bouclier.
+- Le TDC n'est jamais enregistré.
 
 Armée seule (sans Armes, Bouclier, TDC, perte ni réplique) : le bot calcule le niveau d'Armes rentable au lieu du tableau. Il demande l'unité pondue (menu, bouton, ou son nom envoyé dans le salon), puis remplace la question par le résultat.
 
@@ -30,28 +34,32 @@ Dans un salon chasse, écris seulement `ov 15000` (aussi `Ouv 15000`, `ov: 15 00
 - Boutons réservés à l'auteur, 5 minutes. Un nouvel effectif remplace la question en attente.
 - Modèle : capacité 10 + 0,5 × niveau par ouvrière. Coût en ov modélisé, non vérifié (niveau 1 = Communication 1 à 3 = 560 ov, puis 320 × 2^n) ; le bois n'est pas compté. Détails : `connaissances/mecaniques.md`.
 
-## Salon profil (pseudo en jeu, ov, Champignonnière, Étable à pucerons)
-Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Missyl ov 1 234 567 champi 12 puceron 8`. Le bot met à jour **sa** ligne dans le Google Sheet (une ligne par compte Discord : Nom Discord, ID In Game, ID Discord, Ouvrières, Champignonnière, Étable à pucerons, Mis à jour) et répond « ✅ Enregistré » sans notification.
+## Salon profil (pseudo en jeu, ov, Champignonnière, Étable à pucerons, armée, Armes, Bouclier)
+Dans le salon `1559888062430052474`, chaque joueur écrit par exemple `pseudo Missyl ov 1 234 567 champi 12 puceron 8`, ou colle son armée : `1 425 Jeunes Soldates Naines, 359 Soldates Naines, 100 Naines d’Elites, armes 8, bouclier 7` (mêmes écritures que le salon chasse). Le bot met à jour **sa** fiche et répond « ✅ Enregistré » sans notification.
+- La fiche est dans une base SQLite (`fiches.db`, à côté du bot), qui fait foi. Chaque enregistrement est recopié dans **sa** ligne du Google Sheet (une ligne par compte Discord : Nom Discord, ID In Game, ID Discord, Ouvrières, Champignonnière, Étable à pucerons, Mis à jour, Armes, Bouclier, Armée). Une case modifiée à la main dans le sheet n'est pas relue : elle est écrasée au prochain enregistrement du joueur.
+- Base vide au démarrage (premier lancement, machine de secours) : elle est remplie depuis le sheet.
+- Si la copie dans le sheet échoue, la fiche est quand même enregistrée et le bot le signale.
 - Pseudo en jeu : `pseudo X`, `ig X`, `in game X`, `id in game X`, `id ig X` (un mot : lettres, chiffres, `_`, `-`, `.` ; majuscules gardées). Sans mot-clé, un premier mot qui n'est ni un nombre ni un mot-clé est pris comme pseudo s'il est suivi d'au moins une valeur (`DogGyneco ov 63981 champi 12`).
 - La ligne du joueur est retrouvée par son **ID Discord** (un changement de pseudo Discord ne crée pas de doublon) et chaque colonne par son **titre** : on peut déplacer des colonnes ou en ajouter à la main, le bot n'écrit que dans les siennes. Une colonne du bot absente est recréée en fin de tableau. Ne pas renommer les titres des colonnes du bot.
 - Écritures acceptées : ov, ovs, ouv, ouvrière(s), ouvrier(s) ; champ, champi(s), champignon(s), champignonnière ; puc, puceron(s), étable(s), étable à pucerons. Majuscules et accents indifférents. `:`, `=`, `niv`, `lvl` acceptés entre le mot et le nombre.
 - Nombres : `1234567`, `1 234 567`, `1.234.567`. Le nombre peut aussi être avant le mot si le message commence par un nombre (`12 champi 8 puceron`).
 - On peut n'en donner qu'une partie (`champi 13`) : les autres valeurs restent.
-- `.env` : `GSHEET_KEY=chemin/vers/cle.json` (compte de service, **Éditeur** sur le sheet) et `PROFIL_SHEET_ID=…`. Sans eux, le salon répond que le sheet n'est pas configuré ; le reste du bot tourne.
+- `.env` : `GSHEET_KEY=chemin/vers/cle.json` (compte de service, **Éditeur** sur le sheet) et `PROFIL_SHEET_ID=…`. Sans eux, les fiches sont seulement dans la base. `FICHES_DB=…` pour mettre la base ailleurs.
 
-## `/niveau-joueur` : export CSV du sheet Data OUAF
+## `/niveau-joueur` : export CSV des fiches OUAF
 Commande slash, réponse visible de toi seul : un fichier `niveau_joueur.csv` (et son texte, copiable sur mobile).
 - Colonnes : `player_id,pseudo,etable_puceron,champi,ouvriere`, triées par pseudo.
 - Lignes : les membres de l'alliance (`ALLIANCE` dans `.env`, OUAF par défaut) d'après l'API des exports publics du
-  jeu, qui donne le `player_id`, complétés par le sheet (pseudo comparé sans la casse). Valeur absente = 0.
-- Une fiche du sheet dont le pseudo n'est pas dans l'API garde un `player_id` vide. Si l'API est injoignable,
-  l'export part du sheet seul et le bot le signale.
+  jeu, qui donne le `player_id`, complétés par les fiches de la base (pseudo comparé sans la casse). Valeur absente = 0.
+- Une fiche dont le pseudo n'est pas dans l'API garde un `player_id` vide. Si l'API est injoignable,
+  l'export part des fiches seules et le bot le signale.
 
 ## Fichiers
 - `risque.py` : lecture du texte et calcul (moteur `hunt_mc.py`, copié depuis `tools/`). Essai : `python risque.py "948 JSN, Armes 2, Bouclier 2, TDC 2 148"`.
 - `niveau_armes.py` : commande `/niveau-armes` (calcul + formulaire, menu, 4 emojis intégrés).
 - `renta_puceron.py` : `/renta puceron` et message `ov 15000` (calcul, boutons, fenêtre du niveau actuel).
-- `profil.py` : salon profil (lecture du message + écriture dans le Google Sheet) et export CSV de `/niveau-joueur`.
+- `profil.py` : salon profil (lecture du message + copie dans le Google Sheet) et export CSV de `/niveau-joueur`.
+- `fiches.py` : base SQLite des fiches (fait foi ; remplie depuis le sheet si vide).
 - `bot.py` : le bot (lit les salons de `CHANNEL_ID`, séparés par des virgules : un salon par serveur Discord). Dans les salons de `SILENT_CHANNEL_IDS`, il répond sans notification.
 - `.env` (sur le Pi seulement, secret) : `DISCORD_TOKEN=…` et `CHANNEL_ID=…`.
 - `bot-chasse.service` : service systemd (redémarre tout seul).

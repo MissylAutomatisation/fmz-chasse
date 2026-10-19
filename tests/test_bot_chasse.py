@@ -435,6 +435,7 @@ def test_armes_sessions_par_joueur_et_expiration():
 def test_armes_bot_garde_ses_autres_evenements():
     import os
     os.environ.setdefault("CHANNEL_ID", "1")
+    os.environ["FICHES_DB"] = ":memory:"                                   # pas de fichier de base pendant les tests
     import bot
     names = [c.name for c in bot.tree.get_commands()]
     assert sorted(names) == ["niveau-armes", "niveau-joueur", "renta"]             # un seul arbre pour toutes les commandes
@@ -583,13 +584,10 @@ def test_export_niveau_joueur():
 
 
 def test_export_sans_api():
-    sheet = profil.ProfilSheet.__new__(profil.ProfilSheet)
-    sheet.ws = SimpleNamespace(get_all_values=lambda: [["Nom Discord", "ID In Game", "Champignonnière"],
-                                                        ["x", "Sirius", "16"]])
     ancien = profil.joueurs_api
     profil.joueurs_api = lambda: (_ for _ in ()).throw(OSError("hors ligne"))
     try:
-        texte, ok = sheet.export("OUAF")
+        texte, ok = profil.export([{"Nom Discord": "x", "ID In Game": "Sirius", "Champignonnière": 16}], "OUAF")
     finally:
         profil.joueurs_api = ancien
     assert not ok and texte.splitlines()[1] == ",Sirius,0,16,0"
@@ -643,3 +641,72 @@ def test_puceron_commande_enregistree():
     tree = app_commands.CommandTree(client)
     rp.setup(tree)
     assert tree.get_command("renta").get_command("puceron") is not None
+
+
+# --- Fiches des joueurs (base SQLite, copiée dans le sheet) ---
+import fiches  # noqa: E402
+
+ARMEE_OUAF = ("1 425 Jeunes Soldates Naines, 359 Soldates Naines, 100 Naines d’Elites, 5 601 Jeunes Soldates, "
+              "1 434 Soldates, 4 725 Artilleuses, 303 Artilleuses d’élites, 177 Soldates d’élites, armes 8, bouclier 7")
+
+
+def test_profil_armee_armes_bouclier():
+    v = profil.parse(ARMEE_OUAF)
+    assert v == {"armes": 8, "bouclier": 7, "armee": {"jsn": 1425, "sn": 359, "ne": 100, "js": 5601, "s": 1434,
+                                                       "a": 4725, "ae": 303, "se": 177}}
+    assert "Armes 8 · Bouclier 7 · Armée 1 425 JSN + 359 SN" in profil.summary(v)
+    assert profil.parse("Missyl 1425 JSN armes 8") == {"pseudo": "Missyl", "armes": 8, "armee": {"jsn": 1425}}
+    assert profil.parse("pseudo Missyl ov 1 234 567 champi 12 puceron 8") == {
+        "pseudo": "Missyl", "ov": 1234567, "champi": 12, "puceron": 8}                 # rien de plus qu'avant
+
+
+def test_profil_entete_avec_armee():
+    assert profil.HEADER[-3:] == ["Armes", "Bouclier", "Armée"]
+    assert profil.sheet_value("armee", {"jsn": 1425, "sn": 359}) == "1 425 JSN + 359 SN"
+    assert profil.army_of("1 425 JSN + 359 SN") == {"jsn": 1425, "sn": 359}
+
+
+def test_fiche_seuls_les_champs_donnes_changent():
+    db = fiches.Fiches(":memory:")
+    db.save(1, "Martin", {"pseudo": "Missyl", "ov": 100, "armes": 8, "bouclier": 7, "armee": {"jsn": 10}},
+            date="19/10/2026 14:00")
+    db.save(1, "Martin", {"armee": {"jsn": 20, "sn": 5}}, date="19/10/2026 15:00")      # la dernière armée fait foi
+    f = db.get(1)
+    assert (f["pseudo"], f["ov"], f["armes"], f["bouclier"]) == ("Missyl", 100, 8, 7)
+    assert f["armee"] == {"jsn": 20, "sn": 5} and f["armee_maj"] == "19/10/2026 15:00"
+    db.save(1, "Martin", {"armes": 9}, date="20/10/2026 10:00")
+    assert db.get(1)["armee_maj"] == "19/10/2026 15:00"                                # date de l'armée inchangée
+    assert db.get(2) is None and len(db.all()) == 1
+
+
+def test_fiches_importees_depuis_le_sheet():
+    db = fiches.Fiches(":memory:")
+    n = db.import_sheet([{"Nom Discord": "m", "ID In Game": "Missyl", "ID Discord": "42", "Ouvrières": "1 234",
+                          "Champignonnière": "12", "Étable à pucerons": "", "Mis à jour": "18/10/2026 09:00",
+                          "Armes": "8", "Armée": "1 425 JSN + 359 SN"},
+                         {"Nom Discord": "sans id", "ID Discord": ""}])
+    f = db.get(42)
+    assert n == 1 and (f["pseudo"], f["ov"], f["champi"], f["puceron"], f["armes"]) == ("Missyl", 1234, 12, None, 8)
+    assert f["armee"] == {"jsn": 1425, "sn": 359} and f["armee_maj"] == "18/10/2026 09:00"
+
+
+def test_chasse_avec_la_fiche(monkeypatch):
+    vu = {}
+    monkeypatch.setattr(risque, "table", lambda army, armes, bouclier, tdc, rep=10: vu.update(
+        army=army, armes=armes, bouclier=bouclier, tdc=tdc) or "TABLEAU")
+    fiche = {"armee": {"jsn": 1425, "sn": 359}, "armee_maj": "19/10/2026 14:02", "armes": 8, "bouclier": 7}
+    assert risque.answer("TDC 2 770", fiche) == ("📋 Pris dans ta fiche : armée du 19/10/2026 14:02, Armes, Bouclier\n"
+                                                 "TABLEAU")
+    assert vu == {"army": {"jsn": 1425, "sn": 359}, "armes": 8, "bouclier": 7, "tdc": 2770}
+    assert risque.answer("500 JSN, TDC 2 770", fiche) == "📋 Pris dans ta fiche : Armes, Bouclier\nTABLEAU"
+    assert vu["army"] == {"jsn": 500}                                                   # l'armée collée passe avant
+    assert risque.answer("500 JSN, Armes 2, Bouclier 0, TDC 2 770", fiche) == "TABLEAU"
+    assert (vu["armes"], vu["bouclier"]) == (2, 0)
+    assert risque.answer("500 JSN, TDC 2 770") == "TABLEAU" and vu["armes"] == 0        # sans fiche : comme avant
+    assert risque.answer("TDC 2 770").startswith("❌ Aucune unité")
+    assert "salon profil" in risque.answer("TDC 2 770", {"armes": 8})
+
+
+def test_lecture_partielle():
+    assert risque.parse_partial("TDC 2 770") == (None, None, None, 2770)
+    assert risque.read("500 JSN, armes 3, réplique 30") == (30, None, {"jsn": 500}, 3, None, None)

@@ -68,8 +68,8 @@ def take(text, word, num, after_first, case=False, both=True):
     return found, text
 
 
-def parse(text, need_tdc=True):
-    """Texte libre -> (armée {"jsn": n, "sn": n, "js": n}, armes, bouclier, tdc ; None si absent et need_tdc=False).
+def parse_partial(text):
+    """Texte libre -> (armée {"jsn": n, ...}, armes, bouclier, tdc), None pour chaque élément absent.
 
     Insensible aux majuscules, au pluriel et à l'ordre : « Armes 1 », « 1 armes », « arme: 1 », « TDC 2 770 »,
     « 2770 cm² », « 1 208 JSN », « JSN 1208 », « 1 208 Jeunes Soldates Naines »...
@@ -78,7 +78,7 @@ def parse(text, need_tdc=True):
     levels = {}
     for word, key in LEVEL_WORDS:                     # niveaux : 1 ou 2 chiffres, nombre plutôt après le mot
         found, rest = take(rest, word, r"\d{1,2}(?!\d)", after_first=True)
-        levels[key] = found[0] if found else 0
+        levels[key] = found[0] if found else None
     tdc, rest = take(rest, TDC_WORDS, NUM, after_first=True)
     # unités : « 1 208 JSN » d'habitude ; « JSN 1208 » si le texte commence par un nom d'unité
     unit_first = any(re.match(rf"\s*(?:{w})\b", rest, 0 if case else re.I) for w, _, case in UNIT_WORDS)
@@ -87,12 +87,22 @@ def parse(text, need_tdc=True):
         found, rest = take(rest, word, NUM, after_first=unit_first, case=case, both=False)   # un seul sens : « ces 100 JSN »
         if sum(found):
             found_army[unit] = found_army.get(unit, 0) + sum(found)
-    army = {u: found_army[u] for u in UNIT_ORDER if u in found_army}         # dans l'ordre du jeu
-    if not army:
-        raise ParseError("Aucune unité trouvée. Unités possibles : JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE.")
-    if not tdc and need_tdc:
-        raise ParseError("TDC introuvable. Exemple : TDC 2 770")
+    army = {u: found_army[u] for u in UNIT_ORDER if u in found_army} or None    # dans l'ordre du jeu
     return army, levels["armes"], levels["bouclier"], tdc[0] if tdc else None
+
+
+NO_UNIT = "Aucune unité trouvée. Unités possibles : JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE."
+NO_TDC = "TDC introuvable. Exemple : TDC 2 770"
+
+
+def parse(text, need_tdc=True):
+    """Comme parse_partial, mais l'armée est obligatoire (le TDC aussi si need_tdc) ; Armes et Bouclier absents = 0."""
+    army, armes, bouclier, tdc = parse_partial(text)
+    if not army:
+        raise ParseError(NO_UNIT)
+    if tdc is None and need_tdc:
+        raise ParseError(NO_TDC)
+    return army, armes or 0, bouclier or 0, tdc
 
 
 def army_only(text):
@@ -408,22 +418,44 @@ ENORME_TEUB = r"""```
 ```"""
 
 
-def answer(text):
-    """Réponse du bot à un texte collé (tableau, ou message d'erreur)."""
+def read(text):
+    """(réplique, pertes max, armée, armes, bouclier, tdc) du message ; None pour ce qui manque."""
+    rep, text = replique(text)
+    cap, text = perte(text)
+    return (rep, cap, *parse_partial(text))
+
+
+def answer(text, fiche=None):
+    """Réponse du bot à un texte collé (tableau, ou message d'erreur).
+
+    Ce qui manque dans le message (armée, Armes, Bouclier) est pris dans la fiche du joueur {"armee", "armee_maj",
+    "armes", "bouclier"} ; ce qui est dans le message passe avant la fiche."""
     if re.search(r"[ée]norme\s+teub", text, re.IGNORECASE):     # easter egg
         return ENORME_TEUB
-    raw = text
+    fiche = fiche or {}
     try:
-        rep, text = replique(text)
-        cap, text = perte(text)
-        army, armes, bouclier, tdc = parse(text)
+        rep, cap, army, armes, bouclier, tdc = read(text)
+        from_fiche = []
+        if not army and fiche.get("armee"):
+            army = fiche["armee"]
+            from_fiche.append(f"armée du {fiche['armee_maj']}" if fiche.get("armee_maj") else "armée")
+        for name, value in (("Armes", armes), ("Bouclier", bouclier)):
+            if value is None and fiche.get(name.lower()) is not None:
+                from_fiche.append(name)
+        armes = fiche.get("armes") or 0 if armes is None else armes
+        bouclier = fiche.get("bouclier") or 0 if bouclier is None else bouclier
+        if not army:
+            raise ParseError(NO_UNIT + "\nOu enregistre ton armée dans le salon profil, puis écris juste `TDC 2 770`.")
+        if tdc is None:
+            raise ParseError(NO_TDC)
     except ParseError as e:
-        if "TDC" in str(e) and re.search(r"\d\s*pertes?\b", raw, re.I):     # « TDC 2 770 100 pertes » : nombres collés
+        if "TDC" in str(e) and re.search(r"\d\s*pertes?\b", text, re.I):     # « TDC 2 770 100 pertes » : nombres collés
             e = f"{e}\nSi « pertes » suit le TDC, mets une virgule avant ou écris `perte 100`."
         return f"❌ {e}\nExemple : `1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770` (+ `réplique 30` ou `perte 100` si besoin)"
+    note = f"📋 Pris dans ta fiche : {', '.join(from_fiche)}\n" if from_fiche else ""
     if cap is not None:
-        return loss_table(army, armes, bouclier, tdc, cap)
-    return table(army, armes, bouclier, tdc, rep=rep)
+        return note + loss_table(army, armes, bouclier, tdc, cap)
+    return note + table(army, armes, bouclier, tdc, rep=rep)
 
 
 def replique(text):

@@ -1,16 +1,20 @@
-"""Salon « profil » : chaque joueur donne son pseudo en jeu, ses ouvrières, sa Champignonnière et son Étable à pucerons ;
-le bot met à jour sa ligne dans un Google Sheet (une ligne par compte Discord)."""
+"""Salon « profil » : chaque joueur donne son pseudo en jeu, ses ouvrières, sa Champignonnière, son Étable à pucerons,
+son armée, ses Armes et son Bouclier ; le bot met à jour sa fiche (base `fiches.py`) et sa ligne du Google Sheet."""
 import os
 import re
 import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-FIELDS = ("pseudo", "ov", "champi", "puceron")
-LABELS = {"pseudo": "ID In Game", "ov": "Ouvrières", "champi": "Champignonnière", "puceron": "Étable à pucerons"}
+import risque
+
+FIELDS = ("pseudo", "ov", "champi", "puceron", "armes", "bouclier", "armee")
+LABELS = {"pseudo": "ID In Game", "ov": "Ouvrières", "champi": "Champignonnière", "puceron": "Étable à pucerons",
+          "armes": "Armes", "bouclier": "Bouclier", "armee": "Armée"}
 NOM_DISCORD, ID_DISCORD, DATE = "Nom Discord", "ID Discord", "Mis à jour"
 # Ordre d'un sheet neuf ; ensuite chaque colonne est retrouvée par son titre, où qu'elle soit.
-HEADER = [NOM_DISCORD, LABELS["pseudo"], ID_DISCORD, LABELS["ov"], LABELS["champi"], LABELS["puceron"], DATE]
+HEADER = [NOM_DISCORD, LABELS["pseudo"], ID_DISCORD, LABELS["ov"], LABELS["champi"], LABELS["puceron"], DATE,
+          LABELS["armes"], LABELS["bouclier"], LABELS["armee"]]
 
 # Pseudo en jeu : un mot (lettres, chiffres, _ - .), casse gardée ; lu avant les nombres puis retiré du texte.
 PSEUDO = re.compile(r"\b(?:pseudo|id\s*(?:in\s*game|ig|jeu)|in\s*game|ingame|ig)\b\s*[:=]?\s*(?P<pseudo>[\w.\-]+)",
@@ -24,6 +28,7 @@ AFTER = re.compile(rf"\b{KEYWORD}\b\s*(?:[:=]|lvl|lv|niv(?:eau|\.)?|n°)?\s*{NUM
 BEFORE = re.compile(rf"(?<![\d.,']){NUMBER}\s*{KEYWORD}\b")
 
 USAGE = ("❌ Je n'ai rien compris. Écris par exemple :\n`pseudo TonPseudo ov 1 234 567 champi 12 puceron 8`\n"
+         "ou ton armée : `1 425 Jeunes Soldates Naines, 359 Soldates Naines, armes 8, bouclier 7`\n"
          "Tu peux n'en donner qu'une partie (ex. `champi 13`).")
 
 
@@ -61,13 +66,30 @@ def parse(text: str) -> dict[str, int | str]:
         # à condition que la suite donne au moins une valeur : « bonjour » seul reste incompris.
         m = BARE_PSEUDO.match(text)
         if m and not re.fullmatch(KEYWORD, normalize(m["pseudo"])) and not m["pseudo"][0].isdigit():
-            rest = parse_numbers(text[m.end():])
+            rest = parse_values(text[m.end():])
             if rest:
                 return {"pseudo": m["pseudo"], **rest}
-    found.update(parse_numbers(text))
+    found.update(parse_values(text))
     if not found:
         raise ProfilError(USAGE)
     return found
+
+
+def parse_values(text: str) -> dict:
+    """Armée, Armes et Bouclier (lus comme dans le salon chasse), puis ouvrières, Champignonnière, Étable."""
+    army, armes, bouclier, _ = risque.parse_partial(text)
+    found = {k: v for k, v in (("armes", armes), ("bouclier", bouclier), ("armee", army)) if v is not None}
+    return {**parse_numbers(text), **found}
+
+
+def army_of(text: str) -> dict[str, int] | None:
+    """Texte d'armée (« 1 425 JSN + 359 SN ») -> {unité: n} ; None si aucune unité."""
+    return risque.parse_partial(text)[0]
+
+
+def sheet_value(field: str, value):
+    """Valeur écrite dans le sheet : l'armée en texte court, le reste tel quel."""
+    return risque.army_text(value) if field == "armee" else value
 
 
 def parse_numbers(text: str) -> dict[str, int]:
@@ -88,6 +110,8 @@ def parse_numbers(text: str) -> dict[str, int]:
 
 def summary(values: dict[str, int | str]) -> str:
     def show(field):
+        if field == "armee":
+            return risque.army_text(values[field])
         return values[field] if field == "pseudo" else f"{values[field]:,}".replace(",", " ")
     return " · ".join(f"{LABELS[f]} {show(f)}" for f in FIELDS if f in values)
 
@@ -131,7 +155,7 @@ class ProfilSheet:
                       if len(row) > col[ID_DISCORD] and row[col[ID_DISCORD]].strip() == uid), None)
 
         cells = {NOM_DISCORD: name, ID_DISCORD: uid, DATE: now_paris().strftime("%d/%m/%Y %H:%M")}
-        cells.update({LABELS[field]: value for field, value in values.items()})
+        cells.update({LABELS[field]: sheet_value(field, value) for field, value in values.items()})
         if index is None:
             row = [""] * (max(col.values()) + 1)
             for label, value in cells.items():
@@ -150,13 +174,6 @@ class ProfilSheet:
         header = [h.strip() for h in rows[0]]
         return [dict(zip(header, row)) for row in rows[1:]]
 
-    def export(self, alliance: str) -> tuple[str, bool]:
-        """(CSV, player_id trouvés). Si l'API est injoignable, l'export part du sheet seul, sans player_id."""
-        try:
-            joueurs, ok = joueurs_api(), True
-        except Exception:
-            joueurs, ok = [], False
-        return texte_csv(lignes_export(self.fiches(), joueurs, alliance)), ok
 
 
 def from_env() -> ProfilSheet | None:
@@ -170,6 +187,15 @@ def from_env() -> ProfilSheet | None:
 # --- Export CSV (/niveau-joueur) ---
 EXPORT_HEADER = ["player_id", "pseudo", "etable_puceron", "champi", "ouvriere"]
 API_JOUEURS = "https://s5.fourmizzz.fr/api/exports/players/"
+
+
+def export(fiches: list[dict], alliance: str) -> tuple[str, bool]:
+    """(CSV, player_id trouvés). Si l'API est injoignable, l'export part des fiches seules, sans player_id."""
+    try:
+        joueurs, ok = joueurs_api(), True
+    except Exception:
+        joueurs, ok = [], False
+    return texte_csv(lignes_export(fiches, joueurs, alliance)), ok
 
 
 def entier(valeur) -> int:
