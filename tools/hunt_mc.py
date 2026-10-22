@@ -19,6 +19,9 @@ FOOD = [0.8 * round(20 * math.sqrt(hp * dmg) / 1.1) / 20 for _, dmg, hp in PREY]
 UNITS = {"jsn": (8, 3), "sn": (10, 5), "ne": (13, 7), "js": (16, 10), "s": (20, 15), "c": (30, 1), "ce": (40, 1),
          "a": (10, 30), "ae": (12, 35), "se": (27, 24), "tk": (35, 55), "tke": (50, 80), "tu": (50, 50),
          "tue": (55, 55)}                              # ordre de mort du jeu (toolzzz, class/Combat.js:727-746)
+# temps de ponte de base (s), page « Reine » du jeu ; CE et TkE (XP seulement) : temps de l'unité d'origine
+PONTE = {"jsn": 300, "sn": 450, "ne": 570, "js": 740, "s": 1000, "c": 1410, "ce": 1410, "a": 1440, "ae": 1520,
+         "se": 1450, "tk": 1860, "tke": 1860, "tu": 2740, "tue": 2740}
 
 
 def hunt_factor(tdc):

@@ -49,6 +49,11 @@ VC_WORDS = r"vc|vitesses?\s+de\s+chasses?"           # « vc 2 », « Vitesse de
 VA_WORDS = r"va|vitesses?\s+d\W?\s*attaques?"         # « va 5 », « Vitesse d'attaque 5 »
 
 
+def jsn_equiv(units):
+    """Pertes en équivalent JSN : chaque unité vaut son temps de ponte divisé par celui d'une JSN (1 JS = 2,5)."""
+    return sum(k * hunt_mc.PONTE[u] for u, k in units.items()) / hunt_mc.PONTE["jsn"]
+
+
 class ParseError(ValueError):
     pass
 
@@ -181,8 +186,8 @@ def _chunk(army, tdc, size, armes, bouclier, seed, first, last):
         for rep, mult in REPLIQUES.items():
             big[rep] += att <= mult * life
         units = {u: k for u, k in hunt_mc.fight_losses(army, prey, armes, bouclier).items() if k}
-        losses[sum(units.values())] += 1
-        if sum(units.values()) > sum(worst_units.values()):           # strict : le 1er pire, comme sur un seul cœur
+        losses[round(jsn_equiv(units))] += 1
+        if jsn_equiv(units) > jsn_equiv(worst_units):                 # strict : le 1er pire, comme sur un seul cœur
             worst_units = units
     return big, losses, worst_units
 
@@ -215,7 +220,7 @@ def _stats(army, tdc, size, armes, bouclier, n, seed):
         parts = [_chunk(*args, 0, n)]
     risks = {rep: 100 * sum(p[0][rep] for p in parts) / n for rep in REPLIQUES}
     losses = sum((p[1] for p in parts), Counter())
-    worst_units = max((p[2] for p in parts), key=lambda w: sum(w.values()))   # max garde le 1er à égalité
+    worst_units = max((p[2] for p in parts), key=jsn_equiv)                   # max garde le 1er à égalité
     return risks, sum(k * c for k, c in losses.items()) / n, max(losses), losses, worst_units
 
 
@@ -292,7 +297,7 @@ def star_sizes(army, tdc, armes, bouclier, rows, n=5000):         # même n que 
     sur 20 % de taille, puis on affine au cm² près. Une chasse dont le pire cas tue toute l'armée est perdue : son
     cm²/perte ne veut plus rien dire (il monte avec la taille), le balayage s'arrête avant."""
     best_size, best = max(((r[0], r[4]) for r in rows), key=lambda x: x[1])
-    total = sum(army.values())
+    total = round(jsn_equiv(army))
 
     def per_loss(s):
         _, mean, worst, *_ = stats(army, tdc, s, armes, bouclier, n)
@@ -330,7 +335,7 @@ def key_rows(army, armes, bouclier, tdc, n=5000, rep=10):
     pas de rep (repères à 10 %) ; ⭐ et 🔥 se comparent au meilleur cm²/perte des lignes de rep."""
     def row(s):
         risk, mean, worst, *_ = stats(army, tdc, s, armes, bouclier, n, rep=rep)
-        return s, risk, mean, worst, s / mean if mean else float("inf")             # cm² par JSN perdue
+        return s, risk, mean, worst, s / mean if mean else float("inf")             # cm² par équivalent JSN perdu
     rows = [row(s) for s in sizes(army, tdc, armes, bouclier, n, rep)]
     if not rows:
         return []
@@ -367,7 +372,8 @@ def table(army, armes, bouclier, tdc, n=5000, rep=10):
                      f"{comma(per_loss) if mean else 'sans perte':<9} | {str(worst):<8} {roles}")
     lines += ["🛡 min. pertes  📈 meilleur cm²/perte",
               f"⭐ opti ({round(STARS[0][0] * 100)} % du meilleur{f' en réplique {rep} %' if rep != 10 else ''})  "
-              f"🔥 flemme ({round(STARS[1][0] * 100)} %)"]
+              f"🔥 flemme ({round(STARS[1][0] * 100)} %)",
+              "Pertes en équiv. JSN (1 SN = 1,5 ; 1 JS = 2,5)"]
     return "\n".join(lines + ["```"])
 
 
@@ -388,8 +394,8 @@ def max_loss_size(army, armes, bouclier, tdc, cap, n=5000):
 
 def loss_table(army, armes, bouclier, tdc, cap, n=5000):
     """Une seule ligne : la plus grosse chasse avec au pire cap pertes. Sans réplique."""
-    cap = min(cap, sum(army.values()) - 1)            # toute l'armée perdue = chasse perdue : jamais proposée
-    head = [f"🎯 Chasse pour {fmt_n(cap)} pertes max",
+    cap = min(cap, round(jsn_equiv(army)) - 1)        # toute l'armée perdue = chasse perdue : jamais proposée
+    head = [f"🎯 Chasse pour {fmt_n(cap)} pertes max (équiv. JSN)",
             f"   ({army_text(army)}, Armes {armes}, Bouclier {bouclier}, TDC {fmt_n(tdc)})", ""]
     size = max_loss_size(army, armes, bouclier, tdc, cap, n)
     if not size:

@@ -23,6 +23,24 @@ def test_erreurs_claires():
     assert risque.answer("bonjour").startswith("❌ Aucune unité")
 
 
+def test_pertes_en_equivalent_jsn():
+    """Une perte vaut son temps de ponte divisé par celui d'une JSN (page Reine) : 1 SN = 1,5, 1 JS = 2,5."""
+    assert risque.jsn_equiv({"jsn": 10}) == 10
+    assert risque.jsn_equiv({"sn": 2, "js": 3}) == pytest.approx(2 * 1.5 + 3 * 740 / 300)
+    assert set(risque.hunt_mc.PONTE) == set(risque.hunt_mc.UNITS)
+
+
+def test_plus_de_jsn_jamais_plus_de_pertes():
+    """Des JSN en plus meurent à la place des SN, NE et JS : plus d'unités mortes, mais moins de ponte perdue
+    (armée du salon chasse-bot, 13 700 cm²)."""
+    reste = {"sn": 188, "ne": 136, "js": 2367, "s": 1864, "a": 9126, "ae": 3101, "se": 915}
+    sans, avec = {"jsn": 558, **reste}, {"jsn": 1836, **reste}
+    _, moy_sans, pire_sans, _, unites_sans = risque.stats(sans, 17530, 13700, 8, 7, 2000)
+    _, moy_avec, pire_avec, _, unites_avec = risque.stats(avec, 17530, 13700, 8, 7, 2000)
+    assert sum(unites_avec.values()) > sum(unites_sans.values())
+    assert moy_avec < moy_sans and pire_avec < pire_sans
+
+
 def test_risque_comme_le_calcul_du_04_10():
     """70 cm² à 2 770 TDC (1 208 JSN + 99 SN, Armes 1, Bouclier 2) : ~7,5 % ; 60 cm² : ~1 %."""
     army = {"jsn": 1208, "sn": 99}
@@ -43,7 +61,7 @@ def test_tableau_pret_pour_discord():
     assert all(len(r.split("|")) == 5 for r in rows)
     roles = "".join(r.split()[-1] for r in rows)
     assert sorted(roles) == sorted("🛡📈⭐🔥") and "🛡" in rows[0]
-    assert "📅" not in out and lines[-2].startswith("⭐ opti")
+    assert "📅" not in out and lines[-3].startswith("⭐ opti") and lines[-2].startswith("Pertes en équiv. JSN")
 
 
 def test_fdf_avec_bonus_armes():
@@ -64,7 +82,7 @@ def test_pas_de_plafond_de_taille():
     army = {"jsn": 3905, "sn": 502, "js": 4398, "s": 1372, "a": 4642}
     rows = risque.key_rows(army, 7, 7, 16154)
     star = next(r for r in rows if "⭐" in r[5])
-    assert star[0] > 5000 and star[3] < sum(army.values())
+    assert star[0] > 5000 and star[3] < risque.jsn_equiv(army)
 
 
 def test_meilleur_ratio_vraiment_le_meilleur():
@@ -170,7 +188,7 @@ def test_tableau_perte_max_une_ligne():
     """Plus grosse chasse au pire cas ≤ 100 : une ligne, sans colonne réplique."""
     out = risque.answer("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100")
     lines = out.splitlines()
-    assert lines[0] == lines[-1] == "```" and lines[1] == "🎯 Chasse pour 100 pertes max"
+    assert lines[0] == lines[-1] == "```" and lines[1] == "🎯 Chasse pour 100 pertes max (équiv. JSN)"
     assert "Réplique" not in out and "📅" not in out and "⭐" not in out
     size, mean, _, worst = [c.split()[0] for c in lines[-8].split("|")]
     assert 190 <= int(size) <= 230 and 40 < float(mean.replace(",", ".")) < 80 and int(worst) <= 100
@@ -187,10 +205,10 @@ def test_perte_impossible():
 
 
 def test_detail_des_pertes_du_vrai_pire_combat():
-    """Pire cas en unités : le détail exact du pire combat, sa somme = le pire cas, même calcul sur 1 ou 4 cœurs."""
+    """Pire cas : le détail exact du pire combat en unités, son équivalent JSN = le pire cas, même calcul sur 1 ou 4 cœurs."""
     army = {"jsn": 80, "sn": 1200}
     _, _, worst, _, units = risque.stats(army, 2770, 273, 1, 2, 5000)
-    assert sum(units.values()) == worst and units["jsn"] == 80 and units["sn"] > 0
+    assert round(risque.jsn_equiv(units)) == worst and units["jsn"] == 80 and units["sn"] > 0
     assert risque._chunk(army, 2770, 273, 1, 2, 1, 0, 5000)[2] == units
     out = risque.answer("80 JSN + 1 200 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100").splitlines()
     assert out[-9].split("|")[-1].strip().isdigit() and out[-8].startswith("Pire cas : 80 JSN + ")
@@ -199,9 +217,9 @@ def test_detail_des_pertes_du_vrai_pire_combat():
 def test_perte_jamais_une_chasse_perdue():
     """Limite au-delà de l'armée : plafonnée à l'armée moins 1, la chasse reste gagnée."""
     out = risque.answer("1 208 JSN + 99 SN, Armes 1, Bouclier 2, TDC 2 770, perte 100000").splitlines()
-    assert out[1] == "🎯 Chasse pour 1 306 pertes max"
+    assert out[1] == "🎯 Chasse pour 1 355 pertes max (équiv. JSN)"
     row = next(l for l in out if "cm²  |" in l or " cm² |" in l)
-    assert int(row.split()[0]) < 1000 and int(row.split("|")[-1]) <= 1306
+    assert int(row.split()[0]) < 1000 and int(row.split("|")[-1]) <= 1355
 
 
 def test_tranches_de_pertes_font_100():

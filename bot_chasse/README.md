@@ -8,7 +8,7 @@ Dans un salon dédié, colle ton armée : le bot répond avec le tableau du risq
 
 Ajoute `réplique 30` (ou `réplique 50`) pour compter le risque sur la réplique 30 % au lieu de 10 % : mêmes lignes 🛡 📈 ⭐ 🔥, mais pour des chasses plus grosses. Écritures acceptées : replique, réplique, repliques, répliques. Sans ce mot, le bot compte sur 10 %.
 
-Ajoute `perte 100` pour avoir seulement la plus grosse chasse dont le **pire cas** reste ≤ 100 pertes : une ligne (Chasse, Pertes moy., cm²/perte, Pire cas), puis « 📊 Chances selon les pertes » : 4 tranches égales de 0 à la limite (`BUCKETS`), avec le % des chasses dans chacune (total 100 %), sans réplique. Si le pire cas touche d'autres unités que les JSN, une ligne en dessous donne le détail exact du pire combat (« Pire cas : 80 JSN + 20 SN »). Une tranche presque vide affiche « < 0,1 % » (0 % = jamais). Une limite égale ou plus grande que l'armée est ramenée à l'armée moins 1 : une chasse perdue n'est jamais proposée. Écritures acceptées : perte 100, pertes 100, perte max 100, pertes: 100, 100 pertes.
+Ajoute `perte 100` pour avoir seulement la plus grosse chasse dont le **pire cas** reste ≤ 100 pertes : une ligne (Chasse, Pertes moy., cm²/perte, Pire cas), puis « 📊 Chances selon les pertes » : 4 tranches égales de 0 à la limite (`BUCKETS`), avec le % des chasses dans chacune (total 100 %), sans réplique. Si le pire cas touche d'autres unités que les JSN, une ligne en dessous donne le détail exact du pire combat (« Pire cas : 80 JSN + 20 SN »). Une tranche presque vide affiche « < 0,1 % » (0 % = jamais). Une limite égale ou plus grande que l'armée (en équivalent JSN) est ramenée à l'armée moins 1 : une chasse perdue n'est jamais proposée. Écritures acceptées : perte 100, pertes 100, perte max 100, pertes: 100, 100 pertes.
 
 Il comprend aussi le format du jeu (« 1 208 Jeunes Soldates Naines, 99 Soldates Naines… »). Unités : toutes (JSN, SN, NE, JS, S, C, CE, A, AE, SE, Tk, TkE, Tu, TuE), noms longs ou abréviations ; S, C et A seuls en majuscule. Le TDC est obligatoire.
 
@@ -87,6 +87,7 @@ ssh raspberrypi sudo systemctl restart bot-chasse
 ## Choix
 - Lecture d'un salon (pas de commande `/`) : on colle et c'est tout. Il faut l'intent « Message Content ».
 - Lignes du tableau (4 au plus, fusionnées si deux tombent sur la même taille) : 🛡 min. pertes = la plus grosse chasse à 1 % de risque ; 📈 meilleur cm²/perte parmi les chasses à 1, 2, 5, 7,5, 10, 15 et 20 % de risque ; ⭐ opti = la plus grosse chasse qui garde au moins 85 % du meilleur cm²/perte ; 🔥 flemme = 80 % (`STARS`). 5 000 tirages par taille.
+- Pertes (moyenne, pire cas, `perte 100`) en **équivalent JSN** : chaque unité morte vaut son temps de ponte divisé par celui d'une JSN (`hunt_mc.PONTE`, page « Reine » : 1 SN = 1,5, 1 NE = 1,9, 1 JS = 2,5, 1 A = 4,8). Compter les unités pénalisait les JSN : elles meurent en premier, en grand nombre, mais coûtent le moins de ponte. Le détail « Pire cas : 80 JSN + 20 SN » reste en unités.
 - cm²/perte compte toutes les répliques (10, 30, 50 ou 100 % selon la force face aux prédateurs) : pas besoin de choisir un seuil de réplique.
 - Sous les paramètres : FDF = attaque totale de l'armée × (1 + Armes/10), comme le moteur.
 - Mêmes tirages pour toutes les tailles et tous les TDC (préparés une fois par meute) + cache : les résultats ne sautent pas au hasard.
